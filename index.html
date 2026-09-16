@@ -1,0 +1,2576 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mi Tesla">
+<meta name="theme-color" content="#f5f5f7">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Panel personal para mi Tesla Model Y">
+<title>Mi Tesla</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- Leaflet se carga bajo demanda (ver cargarLeafletSiHaceFalta) para no frenar el arranque del Dashboard -->
+<style>
+:root{
+  --bg:#f5f5f7; --elev:#fff; --sunk:#fbfbfd; --glass:rgba(245,245,247,.82);
+  --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
+  --line:rgba(0,0,0,.08); --fill:rgba(0,0,0,.045);
+  --sh1:0 1px 2px rgba(0,0,0,.06); --sh2:0 2px 10px rgba(0,0,0,.07);
+  --acc:#e8342a; --acc2:#0a84ff; --ok:#2fae60; --warn:#e8912a;
+  --radius:18px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#000; --elev:#1c1c1e; --sunk:#141416; --glass:rgba(0,0,0,.76);
+    --txt:#f5f5f7; --txt2:#98989d; --txt3:#8e8e93;
+    --line:rgba(255,255,255,.09); --fill:rgba(255,255,255,.07);
+    --sh1:0 1px 2px rgba(0,0,0,.5); --sh2:0 2px 14px rgba(0,0,0,.55);
+  }
+}
+html[data-tema="claro"]{
+  --bg:#f5f5f7; --elev:#fff; --sunk:#fbfbfd; --glass:rgba(245,245,247,.82);
+  --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
+  --line:rgba(0,0,0,.08); --fill:rgba(0,0,0,.045);
+  --sh1:0 1px 2px rgba(0,0,0,.06); --sh2:0 2px 10px rgba(0,0,0,.07);
+}
+html[data-tema="oscuro"]{
+  --bg:#000; --elev:#1c1c1e; --sunk:#141416; --glass:rgba(0,0,0,.76);
+  --txt:#f5f5f7; --txt2:#98989d; --txt3:#8e8e93;
+  --line:rgba(255,255,255,.09); --fill:rgba(255,255,255,.07);
+  --sh1:0 1px 2px rgba(0,0,0,.5); --sh2:0 2px 14px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
+
+/* barra superior */
+.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:var(--glass);padding:calc(env(safe-area-inset-top) + 14px) 20px 12px;
+  border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.top::before{content:'';position:absolute;top:0;left:0;right:0;height:env(safe-area-inset-top);
+  background:#000;z-index:1}
+.marca{display:flex;align-items:center;gap:9px}
+.top h1{font-size:21px}
+.logo-badge{width:30px;height:30px;padding:6px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#3a6ea8,#0f2a4a 65%,#050d18);box-shadow:0 2px 6px rgba(10,42,74,.35)}
+.pill{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ok);
+  background:rgba(47,174,96,.13);padding:6px 12px;border-radius:999px}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.pill.p-aparcado{color:var(--txt3);background:var(--fill)}
+.pill.p-aparcado .dot{background:var(--txt3)}
+.pill.p-cargando{color:var(--ok);background:rgba(47,174,96,.13)}
+.pill.p-cargando .dot{background:var(--ok)}
+.pill.p-conduciendo{color:var(--acc2);background:rgba(10,132,255,.13)}
+.pill.p-conduciendo .dot{background:var(--acc2)}
+
+/* contenido */
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
+
+/* hero coche */
+.hero{background:var(--elev);border-radius:24px;box-shadow:var(--sh1);padding:22px 20px;margin-bottom:16px}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.hero-top .modelo{font-size:13px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em}
+.hero-top .estado{font-size:15px;font-weight:600;color:var(--txt2);margin-top:2px}
+.bateria-num{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.bateria-num span{font-size:22px;font-weight:600;color:var(--txt3)}
+.barra{height:8px;border-radius:99px;background:var(--fill);margin:14px 0 10px;overflow:hidden}
+.barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--ok),#8fd39a)}
+.hero-foot{display:flex;justify-content:space-between;font-size:13.5px;color:var(--txt2)}
+.hero-foot b{color:var(--txt);font-weight:600}
+
+/* grid metricas */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.card{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);padding:16px}
+.card .lbl{font-size:12.5px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.03em;
+  display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.card .lbl .ic-lbl{width:13px;height:13px;flex-shrink:0;opacity:.75}
+.card .lbl .ic-lbl svg{width:100%;height:100%;display:block}
+.card .val{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.card .sub{font-size:12.5px;color:var(--txt3);margin-top:3px}
+.card .val.ok{color:var(--ok)}
+
+/* secciones con lista */
+.sec{margin-bottom:16px}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 10px}
+.sec-h h2{font-size:18px}
+.sec-h .ver{font-size:14px;color:var(--acc2);font-weight:600}
+.lista{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);overflow:hidden}
+.fila{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.fila:last-child{border-bottom:none}
+.ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0}
+.ico svg{width:19px;height:19px}
+.ico.viaje{background:rgba(10,132,255,.12);color:var(--acc2)}
+.ico.carga{background:rgba(47,174,96,.13);color:var(--ok)}
+.fila-tx{flex:1;min-width:0}
+.fila-tx .t1{font-size:14.5px;font-weight:600}
+.fila-tx .t2{font-size:12.5px;color:var(--txt3);margin-top:1px}
+.fila-r{text-align:right;flex-shrink:0}
+.fila-r .r1{font-size:14.5px;font-weight:600}
+.fila-r .r2{font-size:12.5px;color:var(--txt3);margin-top:1px}
+.fila{position:relative}
+.fila-tx{cursor:pointer}
+.btn-borrar{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  color:var(--txt3);flex-shrink:0;margin-left:2px}
+.btn-borrar svg{width:16px;height:16px}
+.btn-borrar:active{background:var(--fill)}
+
+/* ahorro destacado */
+.ahorro{background:linear-gradient(135deg,#0a84ff,#5ac8fa);border-radius:var(--radius);padding:20px;
+  color:#fff;margin-bottom:16px;box-shadow:var(--sh2)}
+.ahorro .lbl{font-size:13px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
+.ahorro .val{font-size:32px;font-weight:750;letter-spacing:-.02em}
+.ahorro .sub{font-size:13px;opacity:.9;margin-top:4px}
+
+/* aviso placeholder */
+.aviso{text-align:center;padding:60px 20px;color:var(--txt3)}
+.aviso .em{font-size:34px;margin-bottom:10px}
+.aviso p{font-size:15px;margin:0}
+
+/* formularios */
+.form-oculto{display:none}
+.form-grid{display:flex;flex-direction:column;gap:12px}
+.form-grid label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--txt3)}
+.form-grid input,.form-grid select{font-size:16px;font-weight:500;color:var(--txt);background:var(--sunk);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit}
+.form-acciones{display:flex;gap:10px;margin-top:4px}
+.btn-primario,.btn-secundario{flex:1;padding:12px;border-radius:12px;font-size:14.5px;font-weight:650;text-align:center}
+.btn-primario{background:var(--acc2);color:#fff}
+.btn-secundario{background:var(--fill);color:var(--txt2)}
+.input-inline{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+  font-size:16px;font-weight:600;color:var(--txt);font-family:inherit}
+
+/* feedback táctil */
+.card,.lista .fila,.nav button,.btn-primario,.btn-secundario,.ver,.btn-borrar{transition:transform .12s ease, opacity .12s ease, background .15s ease}
+.card:active{transform:scale(.97)}
+.lista .fila:active{background:var(--fill)}
+.btn-primario:active,.btn-secundario:active{transform:scale(.96)}
+
+/* transición entre vistas */
+.wrap, .aviso{animation:entrada .28s ease}
+@keyframes entrada{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+
+/* estado vacío dentro de listas */
+.vacio{text-align:center;padding:32px 16px;color:var(--txt3)}
+.vacio .em{font-size:28px;margin-bottom:8px;display:block}
+.vacio p{margin:0;font-size:13.5px}
+
+/* filtros tipo chip */
+.filtros{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.filtros::-webkit-scrollbar{display:none}
+.filtros button{flex-shrink:0;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;
+  background:var(--elev);color:var(--txt2);box-shadow:var(--sh1)}
+.filtros button.on{background:var(--acc2);color:#fff}
+
+/* cabecera de grupo por mes dentro de una lista */
+.grupo-mes{padding:14px 16px;font-size:12.5px;font-weight:700;color:var(--txt3);
+  text-transform:uppercase;letter-spacing:.03em;background:var(--sunk);
+  display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.mini-titulo{font-size:11.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;
+  letter-spacing:.04em;padding:0 2px 6px}
+.grupo-mes .chevron{font-size:14px;color:var(--txt3);width:16px;text-align:center}
+
+/* logros / insignias */
+.logros{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.logro{background:var(--elev);border-radius:16px;box-shadow:var(--sh1);padding:14px 8px;text-align:center;opacity:.35}
+.logro.on{opacity:1}
+.logro .em{font-size:26px;display:block;margin-bottom:6px}
+.logro .nombre{font-size:11.5px;font-weight:700;line-height:1.2}
+.logro .desc{font-size:10px;color:var(--txt3);margin-top:2px;line-height:1.25}
+
+/* aviso de batería baja */
+.aviso-banda{display:flex;align-items:center;gap:10px;background:rgba(232,52,42,.1);color:var(--acc);
+  border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;font-weight:600}
+.aviso-banda .ic-lbl{width:18px;height:18px;opacity:1}
+
+/* selector de estado (dashboard) */
+.estado-selector{display:flex;gap:6px;margin-top:10px}
+.estado-selector button{flex:1;padding:8px 4px;border-radius:10px;font-size:11.5px;font-weight:650;
+  background:var(--fill);color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.estado-selector button.on{background:var(--acc2);color:#fff}
+
+/* toast propio */
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(10px);
+  background:var(--elev);color:var(--txt);padding:12px 18px;border-radius:14px;box-shadow:var(--sh2);
+  font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .22s ease, transform .22s ease;
+  display:flex;align-items:center;gap:8px;max-width:86%;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast .punto{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
+#toast.error .punto{background:var(--acc)}
+
+/* modal de confirmación propio */
+#modal-fondo{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:70;display:none;align-items:flex-end;justify-content:center}
+#modal-fondo.on{display:flex}
+#modal-caja{background:var(--elev);border-radius:20px 20px 0 0;padding:22px 20px calc(20px + env(safe-area-inset-bottom));
+  width:100%;max-width:520px;box-shadow:var(--sh2);animation:subir .22s ease}
+@keyframes subir{ from{transform:translateY(100%)} to{transform:translateY(0)} }
+#modal-caja h3{font-size:17px;margin-bottom:6px}
+#modal-caja p{font-size:14px;color:var(--txt2);margin:0 0 18px}
+
+/* nav inferior */
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:20;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:var(--glass);border-top:1px solid var(--line);
+  display:flex;padding:8px 4px calc(6px + env(safe-area-inset-bottom))}
+.nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 1px;
+  font-size:9.5px;font-weight:600;color:var(--txt3)}
+.nav button .ic{width:30px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  transition:background .18s ease}
+.nav button .ic svg{width:19px;height:19px;display:block;transition:transform .12s ease}
+.nav button.on{color:var(--acc2)}
+.nav button.on .ic{background:rgba(10,132,255,.14)}
+.nav button.on .ic svg{stroke:var(--acc2)}
+.nav button:active .ic svg{transform:scale(.88)}
+
+/* selects con flecha propia */
+.form-grid select{-webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:34px}
+</style>
+<script>
+  var temaGuardado = localStorage.getItem('mitesla-tema');
+  if(temaGuardado && temaGuardado!=='auto') document.documentElement.setAttribute('data-tema', temaGuardado);
+</script>
+</head>
+<body>
+
+<div class="top">
+  <div class="marca">
+    <svg class="logo-badge" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M13 3 5 14h5l-1 8 9-12h-5l1-7z" stroke-linejoin="round"/>
+    </svg>
+    <h1>Mi Tesla</h1>
+  </div>
+  <div class="pill" id="pill-estado"><span class="dot" id="pill-dot"></span><span id="pill-texto">En reposo</span></div>
+</div>
+
+<div class="wrap" id="vista-dashboard">
+
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="modelo">Model Y · Long Range</div>
+        <div class="estado" id="dash-estado">Aparcado en casa</div>
+      </div>
+    </div>
+    <div class="bateria-num" id="dash-bateria-num">78<span>%</span></div>
+    <div class="barra"><i id="dash-barra" style="width:78%"></i></div>
+    <div class="hero-foot">
+      <span>Autonomía: <b id="dash-autonomia">398 km</b></span>
+      <span>Última actualización: <b id="dash-ultima-act">—</b></span>
+    </div>
+    <div class="estado-selector" id="estado-selector">
+      <button data-estado="aparcado" class="on">Aparcado</button>
+      <button data-estado="cargando">Cargando</button>
+      <button data-estado="conduciendo">Conduciendo</button>
+    </div>
+  </div>
+
+  <div id="aviso-bateria-baja" style="display:none"></div>
+
+  <div class="grid2" id="dash-metricas"></div>
+
+  <div class="ahorro">
+    <div class="lbl">Ahorro acumulado vs. gasolina</div>
+    <div class="val" id="dash-ahorro">1.067 €</div>
+    <div class="sub" id="dash-ahorro-sub">desde el registro</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Últimos viajes</h2><span class="ver" data-goto="viajes">Ver todos</span></div>
+    <div class="lista" id="dash-viajes"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Últimas cargas</h2><span class="ver" data-goto="cargas">Ver todas</span></div>
+    <div class="lista" id="dash-cargas"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-cargas" style="display:none">
+
+  <div class="grid2" id="resumen-cargas"></div>
+
+  <div class="filtros" id="filtros-cargas">
+    <button class="on" data-filtro="todo">Todo</button>
+    <button data-filtro="domestica">Casa</button>
+    <button data-filtro="supercharger">Supercharger</button>
+    <button data-filtro="publico">Público</button>
+    <button data-filtro="trabajo">Trabajo</button>
+    <button data-filtro="otros">Otros</button>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Historial</h2><span class="ver" id="btn-add-carga">+ Añadir</span></div>
+
+    <div class="lista form-oculto" id="form-carga" style="margin-bottom:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Fecha<input type="datetime-local" id="fc-fecha"></label>
+        <label>Lugar<input type="text" id="fc-lugar" placeholder="Casa, Supercharger..."></label>
+        <label>Tipo
+          <select id="fc-tipo">
+            <option value="domestica">Casa</option>
+            <option value="supercharger">Supercharger</option>
+            <option value="publico">Cargador público</option>
+            <option value="trabajo">Trabajo</option>
+            <option value="otros">Otros</option>
+          </select>
+        </label>
+        <label>kWh<input type="number" step="0.1" id="fc-kwh"></label>
+        <label>€/kWh<input type="number" step="0.01" id="fc-precio"></label>
+        <label>Batería inicial %<input type="number" id="fc-bini"></label>
+        <label>Batería final %<input type="number" id="fc-bfin"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fc-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fc-guardar">Guardar carga</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-cargas"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-viajes" style="display:none">
+
+  <div class="grid2" id="resumen-viajes"></div>
+
+  <div class="filtros" id="filtros-viajes">
+    <button class="on" data-filtro="todo">Todos</button>
+    <button data-filtro="7dias">Últimos 7 días</button>
+    <button data-filtro="mes">Este mes</button>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Historial</h2><span class="ver" id="btn-add-viaje">+ Añadir</span></div>
+
+    <div class="lista form-oculto" id="form-viaje" style="margin-bottom:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Fecha<input type="datetime-local" id="fv-fecha"></label>
+        <label>Origen<input type="text" id="fv-origen" placeholder="Gijón"></label>
+        <label>Destino<input type="text" id="fv-destino" placeholder="Oviedo"></label>
+        <label>Kilómetros<input type="number" step="0.1" id="fv-km"></label>
+        <label>Duración (min)<input type="number" id="fv-duracion"></label>
+        <label>Batería inicial %<input type="number" id="fv-bini"></label>
+        <label>Batería final %<input type="number" id="fv-bfin"></label>
+        <label>Etiqueta
+          <select id="fv-etiqueta">
+            <option value="personal">Personal</option>
+            <option value="trabajo">Trabajo</option>
+            <option value="otro">Otro</option>
+          </select>
+        </label>
+        <label>Conductor (opcional)<input type="text" id="fv-conductor" placeholder="Ej. Carlos"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fv-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fv-guardar">Guardar viaje</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-viajes"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-bateria" style="display:none">
+
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="modelo">Salud de la batería</div>
+        <div class="estado">Capacidad estimada</div>
+      </div>
+    </div>
+    <div class="bateria-num" id="bat-pct">97,3<span>%</span></div>
+    <div class="barra"><i id="bat-barra" style="width:97.3%;background:linear-gradient(90deg,var(--acc2),#7dc8ff)"></i></div>
+    <div class="hero-foot">
+      <span>Nominal: <b id="bat-nominal">75 kWh</b></span>
+      <span>Estimada: <b id="bat-estimada">73,0 kWh</b></span>
+    </div>
+  </div>
+
+  <div class="grid2" id="resumen-bateria"></div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Evolución de la capacidad</h2></div>
+    <div class="card" id="chart-bateria" style="padding:16px 14px 8px"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-mapa" style="display:none">
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+    <div id="leaflet-map" style="height:320px;width:100%"></div>
+  </div>
+
+  <div class="mini-titulo">Mis rutas</div>
+  <div class="filtros" id="filtros-rutas" style="margin-bottom:4px">
+    <button data-periodo="semana">Esta semana</button>
+    <button data-periodo="mes" class="on">Este mes</button>
+    <button data-periodo="año">Este año</button>
+    <button data-periodo="todo">Todo</button>
+    <button data-periodo="ninguno">Sin rutas</button>
+  </div>
+  <p id="rutas-estado" style="font-size:12.5px;color:var(--txt3);padding:0 4px 18px">Trazando tus rutas de este mes…</p>
+
+  <div class="mini-titulo">Capas del mapa</div>
+  <div class="filtros" style="margin-bottom:6px">
+    <button id="btn-cargadores-publicos">📍 Cargadores públicos cercanos</button>
+    <button id="btn-alcance">🎯 Círculo de alcance</button>
+  </div>
+  <div class="filtros" id="filtro-potencia" style="display:none;margin-bottom:6px">
+    <button data-potencia="0" class="on">Cualquier potencia</button>
+    <button data-potencia="22">22 kW+</button>
+    <button data-potencia="50">50 kW+</button>
+    <button data-potencia="100">100 kW+</button>
+    <button data-potencia="150">150 kW+</button>
+  </div>
+  <p id="cargadores-estado" style="font-size:12.5px;color:var(--txt3);padding:0 4px 20px">Datos de Open Charge Map, comunidad abierta de cargadores.</p>
+
+  <div class="card" id="tarjeta-clima" style="display:none;margin-bottom:16px"></div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>¿Llego?</h2></div>
+    <div class="lista">
+      <div style="padding:16px" class="form-grid">
+        <label>Destino (opcional, para guardarlo)<input type="text" id="llego-destino" placeholder="Ej. Madrid"></label>
+        <label>Distancia al destino (km, ida)<input type="number" step="1" id="llego-km" placeholder="Ej. 120"></label>
+        <label>Velocidad media prevista (km/h, opcional)<input type="number" step="1" id="llego-velocidad" placeholder="Ej. 110 en autovía"></label>
+        <div class="form-acciones">
+          <button class="btn-primario" id="llego-calcular" style="flex:none;padding:12px 20px">Calcular</button>
+        </div>
+      </div>
+      <div id="llego-resultado"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Planes guardados</h2></div>
+    <div class="lista" id="lista-planes"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Lugares</h2></div>
+    <div class="lista" id="lista-lugares"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-economia" style="display:none">
+
+  <div class="ahorro">
+    <div class="lbl">Ahorro acumulado vs. gasolina</div>
+    <div class="val">1.067 €</div>
+    <div class="sub">7,0 l/100km · 1,55 €/l de referencia</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Coste energético</h2></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="lbl">Tesla</div>
+        <div class="val">2,84 €<span style="font-size:14px;font-weight:600;color:var(--txt3)">/100km</span></div>
+        <div class="sub">15,8 kWh/100km · 0,18 €/kWh medio</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Gasolina (ref.)</div>
+        <div class="val">10,85 €<span style="font-size:14px;font-weight:600;color:var(--txt3)">/100km</span></div>
+        <div class="sub">7,0 l/100km · 1,55 €/l</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Coste total del vehículo</h2><span class="ver" id="btn-add-gasto">+ Añadir gasto</span></div>
+
+    <div class="lista form-oculto" id="form-gasto" style="margin-bottom:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Fecha<input type="date" id="fg-fecha"></label>
+        <label>Categoría
+          <select id="fg-categoria">
+            <option value="seguro">Seguro</option>
+            <option value="neumaticos">Neumáticos</option>
+            <option value="mantenimiento">Mantenimiento</option>
+            <option value="reparaciones">Reparaciones</option>
+            <option value="accesorios">Accesorios</option>
+            <option value="lavados">Lavados</option>
+            <option value="otros">Otros</option>
+          </select>
+        </label>
+        <label>Concepto<input type="text" id="fg-concepto" placeholder="Descripción breve"></label>
+        <label>Importe (€)<input type="number" step="0.01" id="fg-importe"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fg-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fg-guardar">Guardar gasto</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-gastos"></div>
+  </div>
+
+  <div class="grid2" id="resumen-costes"></div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Recordatorios de mantenimiento</h2><span class="ver" id="btn-add-recordatorio">+ Añadir</span></div>
+
+    <div class="lista form-oculto" id="form-recordatorio" style="margin-bottom:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Concepto<input type="text" id="fr-concepto" placeholder="Cambio de neumáticos, ITV..."></label>
+        <label>Kilómetro objetivo<input type="number" id="fr-km" placeholder="Ej. 60000"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fr-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fr-guardar">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-recordatorios"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Neumáticos</h2></div>
+    <div class="grid2" id="tarjetas-neumaticos"></div>
+
+    <div class="lista form-oculto" id="form-neumatico" style="margin-top:12px">
+      <div style="padding:16px" class="form-grid">
+        <div id="fn-titulo" style="font-size:14px;font-weight:700;color:var(--txt)">Neumáticos delanteros</div>
+        <label>Fecha de instalación<input type="date" id="fn-fecha"></label>
+        <label>Kilómetro del odómetro en ese momento<input type="number" id="fn-km"></label>
+        <label>Vida útil estimada (km)<input type="number" id="fn-vida" placeholder="45000"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fn-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fn-guardar">Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Accesorios y extras</h2><span class="ver" id="btn-add-accesorio">+ Añadir</span></div>
+
+    <div class="lista form-oculto" id="form-accesorio" style="margin-bottom:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Nombre<input type="text" id="fa-nombre" placeholder="Alfombrillas, cargador, funda..."></label>
+        <label>Categoría
+          <select id="fa-categoria">
+            <option value="proteccion">Protección (alfombrillas, fundas...)</option>
+            <option value="carga">Carga (cables, adaptadores...)</option>
+            <option value="confort">Confort e interior</option>
+            <option value="estetica">Estética (llantas, vinilos...)</option>
+            <option value="tecnologia">Tecnología y accesorios electrónicos</option>
+            <option value="otros">Otros</option>
+          </select>
+        </label>
+        <label>Fecha de compra<input type="date" id="fa-fecha"></label>
+        <label>Precio (€)<input type="number" step="0.01" id="fa-precio"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fa-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fa-guardar">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-accesorios"></div>
+    <p id="total-accesorios" style="font-size:13px;color:var(--txt3);padding:10px 4px 0"></p>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-estadisticas" style="display:none">
+
+  <div class="filtros" style="margin-bottom:14px">
+    <button id="btn-resumen-anual">✨ Año en resumen</button>
+  </div>
+  <div class="card" id="tarjeta-resumen-anual" style="display:none;margin-bottom:16px"></div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Kilómetros por mes</h2></div>
+    <div class="card" id="chart-km-mes" style="padding:16px 14px 8px"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Kilómetros</h2></div>
+    <div class="grid2" id="stats-km"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Consumo y eficiencia</h2></div>
+    <div class="grid2" id="stats-consumo"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Cargas y tiempo</h2></div>
+    <div class="grid2" id="stats-cargas"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Récords personales</h2></div>
+    <div class="lista" id="stats-records"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Logros</h2></div>
+    <div class="logros" id="stats-logros"></div>
+  </div>
+
+</div>
+
+<div class="wrap" id="vista-ajustes" style="display:none">
+
+  <div class="sec">
+    <div class="sec-h"><h2>Vehículo</h2></div>
+    <div class="lista">
+      <div class="fila"><div class="fila-tx"><div class="t1">Modelo</div><div class="t2">Model Y Premium Dual Motor Long Range</div></div></div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Fecha de compra</div></div>
+        <div class="fila-r"><input type="date" id="veh-fecha-compra" class="input-inline"></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Batería nominal (kWh)</div></div>
+        <div class="fila-r"><input type="number" id="veh-capacidad" style="width:70px;text-align:right" class="input-inline"></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Autonomía WLTP (km)</div></div>
+        <div class="fila-r"><input type="number" id="veh-autonomia" style="width:70px;text-align:right" class="input-inline"></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Odómetro actual (km)</div></div>
+        <div class="fila-r"><input type="number" id="veh-odometro" style="width:80px;text-align:right" class="input-inline"></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Renovación del seguro</div></div>
+        <div class="fila-r"><input type="date" id="veh-seguro" class="input-inline"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Referencia gasolina</h2></div>
+    <div class="lista">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Consumo (l/100km)</div></div>
+        <div class="fila-r"><input type="number" step="0.1" id="ref-consumo" style="width:70px;text-align:right" class="input-inline"></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Precio por litro (€)</div></div>
+        <div class="fila-r"><input type="number" step="0.01" id="ref-precio" style="width:70px;text-align:right" class="input-inline"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Tarifa eléctrica por horas</h2></div>
+    <div class="lista">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Valle</div><div class="t2">00-08h y fines de semana</div></div>
+        <div class="fila-r"><input type="number" step="0.01" id="tarifa-valle" style="width:70px;text-align:right" class="input-inline"> €/kWh</div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Llano</div><div class="t2">08-10h, 14-18h, 22-24h</div></div>
+        <div class="fila-r"><input type="number" step="0.01" id="tarifa-llano" style="width:70px;text-align:right" class="input-inline"> €/kWh</div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Punta</div><div class="t2">10-14h y 18-22h</div></div>
+        <div class="fila-r"><input type="number" step="0.01" id="tarifa-punta" style="width:70px;text-align:right" class="input-inline"> €/kWh</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--txt3);padding:8px 4px 0">Al registrar una carga en casa, se sugiere el precio según la hora — horario peninsular habitual (2.0TD), ajústalo si el tuyo es distinto.</p>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Apariencia</h2></div>
+    <div class="filtros" id="selector-tema" style="margin:0">
+      <button data-tema="auto" class="on">Automático</button>
+      <button data-tema="claro">Claro</button>
+      <button data-tema="oscuro">Oscuro</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Avisos</h2></div>
+    <div class="lista">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Avisar si la batería baja de</div><div class="t2">Se muestra en el Dashboard</div></div>
+        <div class="fila-r"><input type="number" id="umbral-bateria" style="width:60px;text-align:right" class="input-inline"> %</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Conexión con Tesla</h2></div>
+    <div class="lista" style="margin-bottom:10px">
+      <div style="padding:16px" class="form-grid">
+        <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" placeholder="Pendiente de tu cuenta de desarrollador"></label>
+        <label>URL del backend (Cloudflare Worker)<input type="text" id="tesla-backend-url" placeholder="https://api.tudominio.com"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="tesla-guardar-config">Guardar config.</button>
+          <button class="btn-primario" id="tesla-conectar">Conectar con Tesla</button>
+        </div>
+      </div>
+    </div>
+    <p id="tesla-estado" style="font-size:13px;color:var(--txt3);padding:0 4px">Pendiente: necesita dominio verificado y cuenta de desarrollador Tesla.</p>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Sincronización con GitHub</h2></div>
+    <div class="lista" style="margin-bottom:10px">
+      <div style="padding:16px" class="form-grid">
+        <label>Repositorio (usuario/repo)<input type="text" id="gh-repo" placeholder="tuusuario/mitesla-datos"></label>
+        <label>Ruta del archivo<input type="text" id="gh-path" placeholder="datos.json"></label>
+        <label>Token personal (PAT)<input type="password" id="gh-token" placeholder="ghp_..."></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="gh-guardar-config">Guardar config.</button>
+          <button class="btn-primario" id="gh-sync">Sincronizar ahora</button>
+        </div>
+      </div>
+    </div>
+    <p id="gh-estado" style="font-size:13px;color:var(--txt3);padding:0 4px">Sin configurar todavía.</p>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px">El token se guarda solo en este dispositivo, nunca se sube al repositorio.</p>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Copia de seguridad</h2></div>
+    <div class="lista">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Exportar datos (.json)</div><div class="t2">Copia completa, para restaurar en Mi Tesla</div></div>
+        <div class="fila-r"><span class="ver" id="btn-exportar">Descargar</span></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Exportar viajes (.csv)</div><div class="t2">Para abrir en Excel o Google Sheets</div></div>
+        <div class="fila-r"><span class="ver" id="btn-exportar-csv-viajes">Descargar</span></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Exportar cargas (.csv)</div><div class="t2">Para abrir en Excel o Google Sheets</div></div>
+        <div class="fila-r"><span class="ver" id="btn-exportar-csv-cargas">Descargar</span></div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Importar datos</div><div class="t2">Reemplaza los datos actuales de este dispositivo</div></div>
+        <div class="fila-r"><label class="ver" style="cursor:pointer">Elegir archivo<input type="file" id="input-importar" accept="application/json" style="display:none"></label></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="wrap aviso" id="vista-proximamente" style="display:none">
+  <div class="em">🚧</div>
+  <p>Esta sección se construye en la siguiente fase.</p>
+</div>
+
+<div class="nav">
+  <button class="on" data-vista="dashboard"><span class="ic" data-icon="home"></span>Dashboard</button>
+  <button data-vista="cargas"><span class="ic" data-icon="rayo"></span>Cargas</button>
+  <button data-vista="viajes"><span class="ic" data-icon="ruta"></span>Viajes</button>
+  <button data-vista="mapa"><span class="ic" data-icon="pin"></span>Mapa</button>
+  <button data-vista="bateria"><span class="ic" data-icon="bateria"></span>Batería</button>
+  <button data-vista="economia"><span class="ic" data-icon="euro"></span>Economía</button>
+  <button data-vista="estadisticas"><span class="ic" data-icon="stats"></span>Stats</button>
+  <button data-vista="ajustes"><span class="ic" data-icon="ajustes"></span>Ajustes</button>
+</div>
+
+<div id="toast"><span class="punto"></span><span id="toast-texto"></span></div>
+
+<div id="modal-fondo">
+  <div id="modal-caja">
+    <h3 id="modal-titulo">¿Seguro?</h3>
+    <p id="modal-texto">Esta acción no se puede deshacer.</p>
+    <div class="form-acciones">
+      <button class="btn-secundario" id="modal-cancelar">Cancelar</button>
+      <button class="btn-primario" id="modal-confirmar" style="background:var(--acc)">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Copia de seguridad: exportar / importar ---------- */
+function descargarArchivo(contenido, nombre, tipo){
+  var blob = new Blob([contenido], { type: tipo });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = nombre; a.click();
+  URL.revokeObjectURL(url);
+}
+function aCSV(filas, columnas){
+  var esc = function(v){ v = String(v==null?'':v); return /[",;\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  var lineas = [columnas.map(function(c){return esc(c.titulo);}).join(';')];
+  filas.forEach(function(f){ lineas.push(columnas.map(function(c){return esc(c.valor(f));}).join(';')); });
+  return lineas.join('\r\n');
+}
+document.getElementById('btn-exportar').addEventListener('click', function(){
+  descargarArchivo(JSON.stringify(DATOS, null, 2), 'mitesla-datos-'+new Date().toISOString().slice(0,10)+'.json', 'application/json');
+  toast('Copia descargada');
+});
+document.getElementById('btn-exportar-csv-viajes').addEventListener('click', function(){
+  var csv = aCSV(DATOS.viajes, [
+    {titulo:'Fecha', valor:function(v){return v.fecha;}},
+    {titulo:'Origen', valor:function(v){return v.origen;}},
+    {titulo:'Destino', valor:function(v){return v.destino;}},
+    {titulo:'Km', valor:function(v){return v.km;}},
+    {titulo:'Duración (min)', valor:function(v){return v.duracion_min;}},
+    {titulo:'Batería inicial %', valor:function(v){return v.bateria_inicial;}},
+    {titulo:'Batería final %', valor:function(v){return v.bateria_final;}},
+    {titulo:'Consumo kWh/100km', valor:function(v){return consumoViaje(v).toFixed(1);}}
+  ]);
+  descargarArchivo('\uFEFF'+csv, 'mitesla-viajes.csv', 'text/csv;charset=utf-8');
+  toast('CSV de viajes descargado');
+});
+document.getElementById('btn-exportar-csv-cargas').addEventListener('click', function(){
+  var csv = aCSV(DATOS.cargas, [
+    {titulo:'Fecha', valor:function(c){return c.fecha;}},
+    {titulo:'Lugar', valor:function(c){return c.lugar;}},
+    {titulo:'Tipo', valor:function(c){return NOMBRE_TIPO[c.tipo]||c.tipo;}},
+    {titulo:'kWh', valor:function(c){return c.kwh;}},
+    {titulo:'€/kWh', valor:function(c){return c.precio_kwh;}},
+    {titulo:'Coste (€)', valor:function(c){return (c.kwh*c.precio_kwh).toFixed(2);}},
+    {titulo:'Batería inicial %', valor:function(c){return c.bateria_inicial;}},
+    {titulo:'Batería final %', valor:function(c){return c.bateria_final;}}
+  ]);
+  descargarArchivo('\uFEFF'+csv, 'mitesla-cargas.csv', 'text/csv;charset=utf-8');
+  toast('CSV de cargas descargado');
+});
+document.getElementById('input-importar').addEventListener('change', function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var lector = new FileReader();
+  lector.onload = function(){
+    try{
+      var importado = JSON.parse(lector.result);
+      if(!importado.cargas || !importado.viajes || !importado.gastos) throw new Error('Formato no válido');
+      confirmarAccion('Importar datos', 'Esto reemplaza los datos actuales de este dispositivo por los del archivo. No afecta a lo que ya esté sincronizado en GitHub.', function(){
+        DATOS = importado;
+        guardarDatos();
+        renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
+        toast('Datos importados');
+      });
+    }catch(err){
+      toast('El archivo no es una copia de Mi Tesla válida.', true);
+    }
+    e.target.value = '';
+  };
+  lector.readAsText(file);
+});
+
+/* ---------- Filtros de tipo en Cargas ---------- */
+document.getElementById('filtros-cargas').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-filtro]');
+  if(!btn) return;
+  filtroCargaActivo = btn.dataset.filtro;
+  document.querySelectorAll('#filtros-cargas button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  renderCargas();
+});
+
+/* ---------- Filtros de periodo en Viajes ---------- */
+document.getElementById('filtros-viajes').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-filtro]');
+  if(!btn) return;
+  filtroViajeActivo = btn.dataset.filtro;
+  document.querySelectorAll('#filtros-viajes button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  renderViajes();
+});
+
+/* ---------- Selector manual de estado (hasta tener conexión real con Tesla) ---------- */
+document.getElementById('estado-selector').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-estado]');
+  if(!btn) return;
+  DATOS.vehiculo.estado = btn.dataset.estado;
+  guardarDatos();
+  renderDashboard();
+});
+
+/* ---------- Toast y modal de confirmación propios ---------- */
+var toastTimer = null;
+function toast(msg, esError){
+  var el = document.getElementById('toast');
+  document.getElementById('toast-texto').textContent = msg;
+  el.classList.toggle('error', !!esError);
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('on'); }, 2600);
+}
+function confirmarAccion(titulo, texto, onConfirmar){
+  document.getElementById('modal-titulo').textContent = titulo;
+  document.getElementById('modal-texto').textContent = texto;
+  var fondo = document.getElementById('modal-fondo');
+  fondo.classList.add('on');
+  var btnOk = document.getElementById('modal-confirmar');
+  var btnNo = document.getElementById('modal-cancelar');
+  function cerrar(){ fondo.classList.remove('on'); btnOk.removeEventListener('click', ok); btnNo.removeEventListener('click', cerrar); }
+  function ok(){ cerrar(); onConfirmar(); }
+  btnOk.addEventListener('click', ok);
+  btnNo.addEventListener('click', cerrar);
+}
+
+/* ---------- Modelo de datos (semilla + localStorage) ---------- */
+var SEED = {
+  vehiculo: { capacidad_nominal_kwh: 75, autonomia_wltp_km: 525, fecha_compra: '2026-01-15', odometro_km: 18240, estado: 'aparcado' },
+  referencia_gasolina: { consumo_l_100km: 7.0, precio_litro: 1.55 },
+  bateria_historico: [
+    { fecha:'2026-01-15', capacidad_pct:100 },
+    { fecha:'2026-03-15', capacidad_pct:99.4 },
+    { fecha:'2026-05-15', capacidad_pct:98.6 },
+    { fecha:'2026-07-15', capacidad_pct:98.0 },
+    { fecha:'2026-09-01', capacidad_pct:97.3 }
+  ],
+  viajes: [
+    { id:'v001', fecha:'2026-09-12T09:12', origen:'Gijón', destino:'Oviedo', km:28.4, duracion_min:31, bateria_inicial:82, bateria_final:76 },
+    { id:'v002', fecha:'2026-09-11T19:47', origen:'Oviedo', destino:'Gijón', km:28.1, duracion_min:29, bateria_inicial:88, bateria_final:82 },
+    { id:'v003', fecha:'2026-09-08T07:20', origen:'Casa', destino:'Aeropuerto de Asturias', km:62.7, duracion_min:46, bateria_inicial:95, bateria_final:82 }
+  ],
+  cargas: [
+    { id:'c001', fecha:'2026-09-10T23:10', lugar:'Casa', tipo:'domestica', kwh:22.4, precio_kwh:0.16, bateria_inicial:32, bateria_final:80 },
+    { id:'c002', fecha:'2026-09-06T12:05', lugar:'Supercharger Gijón', tipo:'supercharger', kwh:41.2, precio_kwh:0.35, bateria_inicial:18, bateria_final:90 }
+  ],
+  gastos: [
+    { id:'g001', fecha:'2026-03-01', categoria:'seguro', concepto:'Seguro anual', importe:620 },
+    { id:'g002', fecha:'2026-07-15', categoria:'neumaticos', concepto:'4 neumáticos', importe:780 }
+  ],
+  recordatorios: [
+    { id:'r001', concepto:'Rotación / cambio de neumáticos', km_objetivo:40000 },
+    { id:'r002', concepto:'ITV', km_objetivo:60000 }
+  ],
+  neumaticos: {
+    delanteros: { fecha_instalacion:'2026-01-15', km_instalacion:0, vida_util_km:45000 },
+    traseros: { fecha_instalacion:'2026-01-15', km_instalacion:0, vida_util_km:45000 }
+  },
+  accesorios: [
+    { id:'a001', nombre:'Alfombrillas todo tiempo', categoria:'proteccion', fecha:'2026-01-20', precio:89 },
+    { id:'a002', nombre:'Cable Type 2 portátil', categoria:'carga', fecha:'2026-02-03', precio:145 }
+  ],
+  seguro: { fecha_renovacion: '2027-03-01' },
+  planes: [],
+  favoritos: []
+};
+function cargarDatos(){
+  try{
+    var guardado = JSON.parse(localStorage.getItem('mitesla-datos'));
+    if(guardado && guardado.cargas && guardado.gastos && guardado.viajes){
+      if(!guardado.recordatorios) guardado.recordatorios = [];
+      if(!guardado.neumaticos) guardado.neumaticos = JSON.parse(JSON.stringify(SEED.neumaticos));
+      if(!guardado.accesorios) guardado.accesorios = [];
+      if(!guardado.seguro) guardado.seguro = { fecha_renovacion: '' };
+      if(!guardado.planes) guardado.planes = [];
+      if(!guardado.favoritos) guardado.favoritos = [];
+      return guardado;
+    }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(SEED));
+}
+var DATOS = cargarDatos();
+function guardarDatos(){ localStorage.setItem('mitesla-datos', JSON.stringify(DATOS)); }
+
+function euros(n){ return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function fechaCorta(iso){
+  var d = new Date(iso);
+  return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'}) + ', ' +
+         d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+}
+var NOMBRE_TIPO = {domestica:'Casa', supercharger:'Supercharger', publico:'Cargador público', trabajo:'Trabajo', otros:'Otros'};
+var NOMBRE_CAT = {seguro:'Seguro', neumaticos:'Neumáticos', mantenimiento:'Mantenimiento', reparaciones:'Reparaciones', accesorios:'Accesorios', lavados:'Lavados', otros:'Otros'};
+
+/* ---------- Cálculos derivados de viajes ---------- */
+function consumoViaje(v){
+  var pctUsado = v.bateria_inicial - v.bateria_final;
+  var kwhUsado = pctUsado/100 * DATOS.vehiculo.capacidad_nominal_kwh;
+  return v.km>0 ? (kwhUsado/v.km*100) : 0;
+}
+function statsViajes(){
+  var viajes = DATOS.viajes;
+  var km = viajes.reduce(function(s,v){return s+v.km;},0);
+  var min = viajes.reduce(function(s,v){return s+v.duracion_min;},0);
+  var consumos = viajes.map(consumoViaje).filter(function(c){return c>0;});
+  var media = consumos.length ? consumos.reduce(function(a,b){return a+b;},0)/consumos.length : 0;
+  var velMedia = min>0 ? km/(min/60) : 0;
+  return {
+    n: viajes.length, km: km, min: min, media: media,
+    mejor: consumos.length?Math.min.apply(null,consumos):0,
+    peor: consumos.length?Math.max.apply(null,consumos):0,
+    velMedia: velMedia
+  };
+}
+
+/* ---------- Render: Viajes ---------- */
+var editandoViaje = null;
+var MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function agruparPorMes(items, htmlFila){
+  var grupos = [], mesActual = null, actual = null;
+  items.forEach(function(item){
+    var d = new Date(item.fecha);
+    var clave = d.getFullYear()+'-'+d.getMonth();
+    if(clave !== mesActual){
+      mesActual = clave;
+      actual = { clave: clave, titulo: MESES_LARGO[d.getMonth()]+' '+d.getFullYear(), filas: [] };
+      grupos.push(actual);
+    }
+    actual.filas.push(htmlFila(item));
+  });
+  return grupos.map(function(g, i){
+    var abierto = i===0; // el mes más reciente empieza desplegado
+    return '<div class="grupo-mes" data-toggle-mes="'+g.clave+'">'+
+      '<span>'+g.titulo+'</span><span class="chevron">'+(abierto?'—':'+')+'</span></div>'+
+      '<div class="grupo-filas" data-mes="'+g.clave+'" style="'+(abierto?'':'display:none')+'">'+g.filas.join('')+'</div>';
+  }).join('');
+}
+
+var filtroViajeActivo = 'todo';
+function renderViajes(){
+  var viajes = DATOS.viajes.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  var s = statsViajes();
+  document.getElementById('resumen-viajes').innerHTML =
+    '<div class="card"><div class="lbl">Viajes registrados</div><div class="val">'+s.n+'</div><div class="sub">'+s.km.toFixed(1)+' km totales</div></div>'+
+    '<div class="card"><div class="lbl">Consumo medio</div><div class="val">'+s.media.toFixed(1)+' <span style="font-size:14px;font-weight:600;color:var(--txt3)">kWh/100km</span></div><div class="sub">Mejor: '+s.mejor.toFixed(1)+' · Peor: '+s.peor.toFixed(1)+'</div></div>'+
+    '<div class="card"><div class="lbl">Tiempo conduciendo</div><div class="val">'+Math.floor(s.min/60)+'h '+(s.min%60)+'min</div><div class="sub">Registrado</div></div>'+
+    '<div class="card"><div class="lbl">Velocidad media</div><div class="val">'+Math.round(s.velMedia)+' km/h</div><div class="sub">En trayecto</div></div>';
+
+  var ahora = new Date();
+  var filtrados = viajes.filter(function(v){
+    var d = new Date(v.fecha);
+    if(filtroViajeActivo==='7dias') return (ahora-d) <= 7*24*3600*1000;
+    if(filtroViajeActivo==='mes') return d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth();
+    return true;
+  });
+
+  document.getElementById('lista-viajes').innerHTML = filtrados.length ? agruparPorMes(filtrados, function(v){
+    var c = consumoViaje(v);
+    var etiquetaTxt = v.etiqueta==='trabajo' ? ' · 💼 Trabajo' : (v.etiqueta==='otro' ? ' · Otro' : '');
+    var conductorTxt = v.conductor ? ' · '+v.conductor : '';
+    return '<div class="fila">'+
+      '<div class="ico viaje" data-icon="ruta"></div>'+
+      '<div class="fila-tx" data-editar-viaje="'+v.id+'"><div class="t1">'+v.origen+' → '+v.destino+'</div>'+
+      '<div class="t2">'+fechaCorta(v.fecha)+' · '+v.duracion_min+' min'+conductorTxt+etiquetaTxt+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+v.km.toFixed(1)+' km</div><div class="r2">'+c.toFixed(1)+' kWh/100km</div></div>'+
+      '<div class="btn-borrar" data-borrar-viaje="'+v.id+'" data-icon="papelera"></div>'+
+      '</div>';
+  }) : '<div class="vacio"><span class="em">🚗</span><p>'+(filtroViajeActivo==='todo' ? 'Todavía no hay viajes. Añade el primero con "+ Añadir".' : 'Sin viajes en este periodo.')+'</p></div>';
+
+  aplicarIconos();
+}
+function abrirFormViaje(v){
+  editandoViaje = v ? v.id : null;
+  document.getElementById('fv-fecha').value = v ? v.fecha : '';
+  document.getElementById('fv-origen').value = v ? v.origen : '';
+  document.getElementById('fv-destino').value = v ? v.destino : '';
+  document.getElementById('fv-km').value = v ? v.km : '';
+  document.getElementById('fv-duracion').value = v ? v.duracion_min : '';
+  document.getElementById('fv-bini').value = v ? v.bateria_inicial : '';
+  document.getElementById('fv-bfin').value = v ? v.bateria_final : '';
+  document.getElementById('fv-etiqueta').value = v ? (v.etiqueta||'personal') : 'personal';
+  document.getElementById('fv-conductor').value = v ? (v.conductor||'') : '';
+  document.getElementById('fv-guardar').textContent = v ? 'Guardar cambios' : 'Guardar viaje';
+  formViaje.classList.remove('form-oculto');
+}
+
+/* ---------- Render: Batería ---------- */
+function renderBateria(){
+  var hist = DATOS.bateria_historico;
+  var actual = hist[hist.length-1].capacidad_pct;
+  var nominal = DATOS.vehiculo.capacidad_nominal_kwh;
+  var estimada = nominal*actual/100;
+  var degradacion = actual-100;
+  var autonomia = Math.round(DATOS.vehiculo.autonomia_wltp_km * actual/100);
+
+  var totalKwh = DATOS.cargas.reduce(function(s,c){return s+c.kwh;},0);
+  var scKwh = DATOS.cargas.filter(function(c){return c.tipo==='supercharger';}).reduce(function(s,c){return s+c.kwh;},0);
+  var pctRapida = totalKwh ? Math.round(scKwh/totalKwh*100) : 0;
+  var ciclos = Math.round(totalKwh/nominal);
+
+  // Curva de referencia típica publicada para baterías Tesla (aprox.): ~5% el primer año, ~1,5%/año después.
+  var meses = Math.max(0, (new Date() - new Date(DATOS.vehiculo.fecha_compra)) / (1000*3600*24*30.44));
+  var esperado = 100 - (5*Math.min(meses,12)/12) - (1.5*Math.max(meses-12,0)/12);
+  var diferencia = actual - esperado;
+
+  document.getElementById('bat-pct').innerHTML = actual.toFixed(1)+'<span>%</span>';
+  document.getElementById('bat-barra').style.width = actual+'%';
+  document.getElementById('bat-nominal').textContent = nominal+' kWh';
+  document.getElementById('bat-estimada').textContent = estimada.toFixed(1).replace('.',',')+' kWh';
+
+  document.getElementById('resumen-bateria').innerHTML =
+    '<div class="card"><div class="lbl">'+li('stats')+'Degradación</div><div class="val">'+degradacion.toFixed(1)+' %</div><div class="sub">Desde la compra</div></div>'+
+    '<div class="card"><div class="lbl">'+li('ruta')+'Autonomía a 100 %</div><div class="val">'+autonomia+' km</div><div class="sub">WLTP ajustada al histórico</div></div>'+
+    '<div class="card"><div class="lbl">'+li('rayo')+'Carga rápida</div><div class="val">'+pctRapida+' %</div><div class="sub">De las cargas totales</div></div>'+
+    '<div class="card"><div class="lbl">'+li('bateria')+'Ciclos equivalentes</div><div class="val">'+ciclos+'</div><div class="sub">Estimado por kWh acumulados</div></div>'+
+    '<div class="card" style="grid-column:1/-1"><div class="lbl">Frente a la media típica</div>'+
+    '<div class="val '+(diferencia>=0?'ok':'')+'">'+(diferencia>=0?'+':'')+diferencia.toFixed(1)+' puntos</div>'+
+    '<div class="sub">'+(diferencia>=0 ? 'Tu batería se conserva mejor de lo habitual para su antigüedad' : 'Ligeramente por debajo de la curva típica, dentro de lo normal')+'</div></div>';
+
+  aplicarIconos();
+  dibujarChartBateria();
+}
+
+/* ---------- Render: Estadísticas ---------- */
+/* ---------- Render: Ajustes ---------- */
+function cargarTarifa(){
+  try{ return JSON.parse(localStorage.getItem('mitesla-tarifa')) || { valle:0.11, llano:0.16, punta:0.22 }; }
+  catch(e){ return { valle:0.11, llano:0.16, punta:0.22 }; }
+}
+function precioSegunHora(fechaISO, tarifa){
+  var d = new Date(fechaISO);
+  var dia = d.getDay(); // 0=domingo, 6=sábado
+  var h = d.getHours();
+  if(dia===0 || dia===6) return tarifa.valle; // fin de semana siempre valle
+  if(h>=0 && h<8) return tarifa.valle;
+  if((h>=10 && h<14) || (h>=18 && h<22)) return tarifa.punta;
+  return tarifa.llano; // 8-10, 14-18, 22-24
+}
+
+function renderAjustes(){
+  document.getElementById('ref-consumo').value = DATOS.referencia_gasolina.consumo_l_100km;
+  document.getElementById('ref-precio').value = DATOS.referencia_gasolina.precio_litro;
+  document.getElementById('veh-fecha-compra').value = DATOS.vehiculo.fecha_compra;
+  document.getElementById('veh-capacidad').value = DATOS.vehiculo.capacidad_nominal_kwh;
+  document.getElementById('veh-autonomia').value = DATOS.vehiculo.autonomia_wltp_km;
+  document.getElementById('veh-odometro').value = DATOS.vehiculo.odometro_km;
+  document.getElementById('veh-seguro').value = DATOS.seguro.fecha_renovacion;
+  document.getElementById('umbral-bateria').value = localStorage.getItem('mitesla-umbral-bateria') || 20;
+  var temaActual = localStorage.getItem('mitesla-tema') || 'auto';
+  document.querySelectorAll('#selector-tema button').forEach(function(b){
+    b.classList.toggle('on', b.dataset.tema === temaActual);
+  });
+  var tarifa = cargarTarifa();
+  document.getElementById('tarifa-valle').value = tarifa.valle;
+  document.getElementById('tarifa-llano').value = tarifa.llano;
+  document.getElementById('tarifa-punta').value = tarifa.punta;
+  var cfg = cargarConfigGithub();
+  document.getElementById('gh-repo').value = cfg.repo || '';
+  document.getElementById('gh-path').value = cfg.path || 'datos.json';
+  document.getElementById('gh-token').value = cfg.token || '';
+  var tcfg = cargarConfigTesla();
+  document.getElementById('tesla-client-id').value = tcfg.clientId || '';
+  document.getElementById('tesla-backend-url').value = tcfg.backendUrl || '';
+  var ultimaSync = localStorage.getItem('mitesla-ultima-sync');
+  if(ultimaSync){
+    document.getElementById('gh-estado').textContent = 'Última sincronización: '+new Date(ultimaSync).toLocaleString('es-ES');
+  }
+}
+
+function renderEstadisticas(){
+  var s = statsViajes();
+  var totalGastos = DATOS.gastos.reduce(function(s,g){return s+g.importe;},0);
+  var totalEnergia = DATOS.cargas.reduce(function(s,c){return s+c.kwh*c.precio_kwh;},0);
+  var kmOdometro = DATOS.vehiculo.odometro_km;
+  var costeGasolina100 = DATOS.referencia_gasolina.consumo_l_100km*DATOS.referencia_gasolina.precio_litro;
+  var costeTesla100 = s.media/100*0.18;
+  var ahorroTotal = (costeGasolina100-costeTesla100)/100*kmOdometro;
+  var co2 = (s.km/100*DATOS.referencia_gasolina.consumo_l_100km*2.31).toFixed(0);
+  var minCarga = DATOS.cargas.length*54;
+
+  document.getElementById('stats-km').innerHTML =
+    '<div class="card"><div class="lbl">Totales</div><div class="val">'+kmOdometro.toLocaleString('es-ES')+' km</div><div class="sub">Desde la compra</div></div>'+
+    '<div class="card"><div class="lbl">Registrados</div><div class="val">'+s.km.toFixed(0)+' km</div><div class="sub">'+s.n+' viajes</div></div>'+
+    '<div class="card"><div class="lbl">Este año</div><div class="val">'+kmOdometro.toLocaleString('es-ES')+' km</div><div class="sub">2026</div></div>'+
+    '<div class="card"><div class="lbl">Media diaria</div><div class="val">'+Math.round(s.km/7)+' km</div><div class="sub">Última semana registrada</div></div>';
+
+  document.getElementById('stats-consumo').innerHTML =
+    '<div class="card"><div class="lbl">Consumo medio</div><div class="val">'+s.media.toFixed(1)+' kWh</div><div class="sub">por 100 km</div></div>'+
+    '<div class="card"><div class="lbl">Mejor viaje</div><div class="val ok">'+s.mejor.toFixed(1)+' kWh</div><div class="sub">por 100 km</div></div>'+
+    '<div class="card"><div class="lbl">Peor viaje</div><div class="val">'+s.peor.toFixed(1)+' kWh</div><div class="sub">por 100 km</div></div>'+
+    '<div class="card"><div class="lbl">CO₂ evitado</div><div class="val ok">'+co2+' kg</div><div class="sub">vs. referencia gasolina</div></div>';
+
+  document.getElementById('stats-cargas').innerHTML =
+    '<div class="card"><div class="lbl">Cargas totales</div><div class="val">'+DATOS.cargas.length+'</div><div class="sub">'+DATOS.cargas.reduce(function(s,c){return s+c.kwh;},0).toFixed(1)+' kWh</div></div>'+
+    '<div class="card"><div class="lbl">Tiempo cargando</div><div class="val">~'+Math.round(minCarga/60)+'h</div><div class="sub">Estimado</div></div>'+
+    '<div class="card"><div class="lbl">Tiempo conduciendo</div><div class="val">'+Math.floor(s.min/60)+'h '+(s.min%60)+'min</div><div class="sub">Registrado</div></div>'+
+    '<div class="card"><div class="lbl">Ahorro total</div><div class="val ok">'+euros(ahorroTotal)+'</div><div class="sub">vs. gasolina</div></div>';
+
+  renderRecords();
+  renderLogros(s, ahorroTotal, kmOdometro, co2);
+}
+
+/* ---------- Récords personales ---------- */
+/* ---------- Año en resumen (estilo "wrapped") ---------- */
+document.getElementById('btn-resumen-anual').addEventListener('click', function(){
+  var cont = document.getElementById('tarjeta-resumen-anual');
+  if(cont.style.display !== 'none'){ cont.style.display = 'none'; this.classList.remove('on'); return; }
+  this.classList.add('on');
+
+  var año = new Date().getFullYear();
+  var viajesAño = DATOS.viajes.filter(function(v){ return new Date(v.fecha).getFullYear()===año; });
+  var cargasAño = DATOS.cargas.filter(function(c){ return new Date(c.fecha).getFullYear()===año; });
+  var km = viajesAño.reduce(function(s,v){ return s+v.km; }, 0);
+  var kwh = cargasAño.reduce(function(s,c){ return s+c.kwh; }, 0);
+  var costeTesla = cargasAño.reduce(function(s,c){ return s+c.kwh*c.precio_kwh; }, 0);
+  var costeGasolina100 = DATOS.referencia_gasolina.consumo_l_100km*DATOS.referencia_gasolina.precio_litro;
+  var ahorro = (costeGasolina100/100*km) - costeTesla;
+  var co2 = (km/100*DATOS.referencia_gasolina.consumo_l_100km*2.31);
+
+  var consumos = viajesAño.map(consumoViaje).filter(function(c){return c>0;});
+  var mejorConsumo = consumos.length ? Math.min.apply(null,consumos) : null;
+
+  var porMes = {};
+  viajesAño.forEach(function(v){ var m=new Date(v.fecha).getMonth(); porMes[m]=(porMes[m]||0)+v.km; });
+  var mesTop = Object.keys(porMes).sort(function(a,b){ return porMes[b]-porMes[a]; })[0];
+
+  cont.style.display = '';
+  cont.innerHTML =
+    '<div style="text-align:center;padding:6px 0 14px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em">Tu '+año+' con el Model Y</div>'+
+    '</div>'+
+    '<div class="grid2">'+
+    '<div class="card"><div class="lbl">Kilómetros</div><div class="val">'+km.toLocaleString('es-ES')+' km</div><div class="sub">'+viajesAño.length+' viajes</div></div>'+
+    '<div class="card"><div class="lbl">Energía cargada</div><div class="val">'+kwh.toFixed(0)+' kWh</div><div class="sub">'+cargasAño.length+' cargas</div></div>'+
+    '<div class="card"><div class="lbl">Ahorro vs. gasolina</div><div class="val ok">'+euros(ahorro)+'</div><div class="sub">Este año</div></div>'+
+    '<div class="card"><div class="lbl">CO₂ evitado</div><div class="val ok">'+co2.toFixed(0)+' kg</div><div class="sub">Estimado</div></div>'+
+    '</div>'+
+    (mejorConsumo ? '<div class="ahorro" style="margin-top:12px"><div class="lbl">Tu mejor eficiencia</div><div class="val">'+mejorConsumo.toFixed(1)+' kWh/100km</div><div class="sub">Tu récord de '+año+'</div></div>' : '')+
+    (mesTop!==undefined ? '<p style="font-size:13px;color:var(--txt3);padding:12px 4px 0;text-align:center">Tu mes con más kilómetros: <b style="color:var(--txt)">'+MESES_LARGO[mesTop]+'</b></p>' : '');
+});
+
+function renderRecords(){
+  var cont = document.getElementById('stats-records');
+  if(!cont) return;
+  var filas = [];
+
+  if(DATOS.viajes.length){
+    var viajesConConsumo = DATOS.viajes.map(function(v){ return { v:v, c:consumoViaje(v) }; }).filter(function(x){ return x.c>0; });
+    if(viajesConConsumo.length){
+      var mejor = viajesConConsumo.reduce(function(a,b){ return b.c<a.c ? b : a; });
+      var peor = viajesConConsumo.reduce(function(a,b){ return b.c>a.c ? b : a; });
+      filas.push('<div class="fila"><div class="ico viaje" data-icon="ruta"></div><div class="fila-tx"><div class="t1">Viaje más eficiente</div><div class="t2">'+mejor.v.origen+' → '+mejor.v.destino+'</div></div><div class="fila-r"><div class="r1 ok" style="color:var(--ok)">'+mejor.c.toFixed(1)+' kWh/100km</div></div></div>');
+      filas.push('<div class="fila"><div class="ico viaje" data-icon="ruta"></div><div class="fila-tx"><div class="t1">Viaje menos eficiente</div><div class="t2">'+peor.v.origen+' → '+peor.v.destino+'</div></div><div class="fila-r"><div class="r1">'+peor.c.toFixed(1)+' kWh/100km</div></div></div>');
+    }
+    var masLargo = DATOS.viajes.reduce(function(a,b){ return b.km>a.km ? b : a; });
+    filas.push('<div class="fila"><div class="ico viaje" data-icon="ruta"></div><div class="fila-tx"><div class="t1">Viaje más largo</div><div class="t2">'+masLargo.origen+' → '+masLargo.destino+'</div></div><div class="fila-r"><div class="r1">'+masLargo.km.toFixed(1)+' km</div></div></div>');
+  }
+  if(DATOS.cargas.length){
+    var cargasConPrecio = DATOS.cargas.map(function(c){ return { c:c, precio:c.precio_kwh }; });
+    var barata = cargasConPrecio.reduce(function(a,b){ return b.precio<a.precio ? b : a; });
+    var cara = cargasConPrecio.reduce(function(a,b){ return b.precio>a.precio ? b : a; });
+    filas.push('<div class="fila"><div class="ico carga" data-icon="rayo"></div><div class="fila-tx"><div class="t1">Carga más barata</div><div class="t2">'+barata.c.lugar+'</div></div><div class="fila-r"><div class="r1" style="color:var(--ok)">'+barata.precio.toFixed(2)+' €/kWh</div></div></div>');
+    filas.push('<div class="fila"><div class="ico carga" data-icon="rayo"></div><div class="fila-tx"><div class="t1">Carga más cara</div><div class="t2">'+cara.c.lugar+'</div></div><div class="fila-r"><div class="r1">'+cara.precio.toFixed(2)+' €/kWh</div></div></div>');
+  }
+
+  cont.innerHTML = filas.join('') || '<div class="vacio"><span class="em">🏆</span><p>Registra viajes y cargas para ver tus récords.</p></div>';
+  aplicarIconos();
+}
+
+/* ---------- Logros / insignias ---------- */
+var LOGROS = [
+  { id:'primer_viaje', em:'🚗', nombre:'Primer viaje', desc:'Registra tu primer trayecto', cumple:function(c){return c.viajes>=1;} },
+  { id:'primera_carga', em:'⚡', nombre:'Primera carga', desc:'Registra tu primera carga', cumple:function(c){return c.cargas>=1;} },
+  { id:'10_cargas', em:'🔋', nombre:'Habitual del enchufe', desc:'10 cargas registradas', cumple:function(c){return c.cargas>=10;} },
+  { id:'100km', em:'🛣️', nombre:'Rodando', desc:'100 km registrados', cumple:function(c){return c.km>=100;} },
+  { id:'1000km', em:'🏁', nombre:'Mil kilómetros', desc:'1.000 km registrados', cumple:function(c){return c.km>=1000;} },
+  { id:'ahorro100', em:'💶', nombre:'Primeros 100 €', desc:'100 € ahorrados frente a gasolina', cumple:function(c){return c.ahorro>=100;} },
+  { id:'ahorro1000', em:'💰', nombre:'Mil euros ahorrados', desc:'1.000 € ahorrados frente a gasolina', cumple:function(c){return c.ahorro>=1000;} },
+  { id:'co2_500', em:'🌱', nombre:'Aire limpio', desc:'500 kg de CO₂ evitados', cumple:function(c){return c.co2>=500;} },
+  { id:'eficiente', em:'🏆', nombre:'Conducción eficiente', desc:'Un viaje bajo 14 kWh/100km', cumple:function(c){return c.mejorConsumo>0 && c.mejorConsumo<14;} }
+];
+function renderLogros(s, ahorroTotal, kmOdometro, co2){
+  var cont = document.getElementById('stats-logros');
+  if(!cont) return;
+  var ctx = { viajes:s.n, cargas:DATOS.cargas.length, km:s.km, ahorro:ahorroTotal, co2:Number(co2), mejorConsumo:s.mejor };
+  cont.innerHTML = LOGROS.map(function(l){
+    var ok = l.cumple(ctx);
+    return '<div class="logro'+(ok?' on':'')+'"><span class="em">'+l.em+'</span>'+
+      '<div class="nombre">'+l.nombre+'</div><div class="desc">'+l.desc+'</div></div>';
+  }).join('');
+}
+
+/* ---------- Render: Dashboard ---------- */
+function ultimoEvento(){
+  var eventos = DATOS.viajes.map(function(v){ return { fecha:v.fecha, pct:v.bateria_final }; })
+    .concat(DATOS.cargas.map(function(c){ return { fecha:c.fecha, pct:c.bateria_final }; }));
+  if(!eventos.length) return null;
+  eventos.sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  return eventos[0];
+}
+function nivelCargaActual(){
+  var ev = ultimoEvento();
+  return ev ? ev.pct : 80;
+}
+function tiempoRelativo(fechaStr){
+  var diffMs = new Date() - new Date(fechaStr);
+  var min = Math.floor(diffMs/60000);
+  if(min < 1) return 'ahora mismo';
+  if(min < 60) return 'hace '+min+' min';
+  var horas = Math.floor(min/60);
+  if(horas < 24) return 'hace '+horas+' h';
+  var dias = Math.floor(horas/24);
+  if(dias === 1) return 'ayer';
+  if(dias < 30) return 'hace '+dias+' días';
+  return new Date(fechaStr).toLocaleDateString('es-ES', {day:'numeric', month:'short'});
+}
+
+function renderDashboard(){
+  var s = statsViajes();
+  var hist = DATOS.bateria_historico;
+  var bateriaActual = hist[hist.length-1].capacidad_pct;
+  var costeTesla100 = s.media/100*0.18;
+  var costeGasolina100 = DATOS.referencia_gasolina.consumo_l_100km*DATOS.referencia_gasolina.precio_litro;
+  var totalGastos = DATOS.gastos.reduce(function(s,g){return s+g.importe;},0);
+  var totalEnergia = DATOS.cargas.reduce(function(s,c){return s+c.kwh*c.precio_kwh;},0);
+  var ahorroTotal = (costeGasolina100-costeTesla100)/100*DATOS.vehiculo.odometro_km;
+
+  var cargaActual = nivelCargaActual();
+  var ar = autonomiaRealKm();
+  document.getElementById('dash-bateria-num').innerHTML = cargaActual + '<span>%</span>';
+  document.getElementById('dash-barra').style.width = cargaActual + '%';
+  document.getElementById('dash-autonomia').textContent = Math.round(ar.km * cargaActual/100) + ' km';
+  var ultEv = ultimoEvento();
+  document.getElementById('dash-ultima-act').textContent = ultEv ? tiempoRelativo(ultEv.fecha) : 'sin datos aún';
+
+  var umbral = parseInt(localStorage.getItem('mitesla-umbral-bateria')) || 20;
+  var avisoEl = document.getElementById('aviso-bateria-baja');
+  if(cargaActual < umbral){
+    avisoEl.style.display = '';
+    avisoEl.innerHTML = '<div class="aviso-banda">'+li('bateria')+'Batería al '+cargaActual+' %, por debajo de tu aviso ('+umbral+' %). Puede ser buen momento para cargar.</div>';
+    aplicarIconos();
+  } else {
+    avisoEl.style.display = 'none';
+  }
+
+  var TEXTOS_ESTADO = { aparcado:'Aparcado en casa', cargando:'Cargando en casa', conduciendo:'En marcha' };
+  var PILL_ESTADO = { aparcado:'En reposo', cargando:'Cargando', conduciendo:'En marcha' };
+  document.getElementById('dash-estado').textContent = TEXTOS_ESTADO[DATOS.vehiculo.estado] || TEXTOS_ESTADO.aparcado;
+  document.querySelectorAll('#estado-selector button').forEach(function(b){
+    b.classList.toggle('on', b.dataset.estado === DATOS.vehiculo.estado);
+  });
+  var estadoActual = DATOS.vehiculo.estado || 'aparcado';
+  document.getElementById('pill-texto').textContent = PILL_ESTADO[estadoActual] || PILL_ESTADO.aparcado;
+  document.getElementById('pill-estado').className = 'pill p-'+estadoActual;
+
+  document.getElementById('dash-metricas').innerHTML =
+    '<div class="card"><div class="lbl">'+li('ruta')+'Odómetro</div><div class="val">'+DATOS.vehiculo.odometro_km.toLocaleString('es-ES')+' km</div><div class="sub">Desde la compra</div></div>'+
+    '<div class="card"><div class="lbl">'+li('rayo')+'Consumo medio</div><div class="val">'+s.media.toFixed(1)+' <span style="font-size:14px;font-weight:600;color:var(--txt3)">kWh/100km</span></div><div class="sub">Últimos viajes</div></div>'+
+    '<div class="card"><div class="lbl">'+li('euro')+'Coste medio</div><div class="val">'+costeTesla100.toFixed(2)+' €<span style="font-size:14px;font-weight:600;color:var(--txt3)">/100km</span></div><div class="sub">Frente a '+costeGasolina100.toFixed(2)+' € gasolina</div></div>'+
+    '<div class="card"><div class="lbl">'+li('bateria')+'Batería</div><div class="val ok">'+bateriaActual.toFixed(1)+' %</div><div class="sub">Capacidad estimada</div></div>';
+
+  document.getElementById('dash-ahorro').textContent = euros(ahorroTotal);
+
+  var viajes = DATOS.viajes.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); }).slice(0,3);
+  document.getElementById('dash-viajes').innerHTML = viajes.map(function(v){
+    var c = consumoViaje(v);
+    return '<div class="fila"><div class="ico viaje" data-icon="ruta"></div>'+
+      '<div class="fila-tx"><div class="t1">'+v.origen+' → '+v.destino+'</div><div class="t2">'+fechaCorta(v.fecha)+' · '+v.duracion_min+' min</div></div>'+
+      '<div class="fila-r"><div class="r1">'+v.km.toFixed(1)+' km</div><div class="r2">'+c.toFixed(1)+' kWh/100km</div></div></div>';
+  }).join('');
+
+  var cargas = DATOS.cargas.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); }).slice(0,2);
+  document.getElementById('dash-cargas').innerHTML = cargas.map(function(c){
+    return '<div class="fila"><div class="ico carga" data-icon="rayo"></div>'+
+      '<div class="fila-tx"><div class="t1">'+c.lugar+'</div><div class="t2">'+fechaCorta(c.fecha)+' · '+c.bateria_inicial+' % → '+c.bateria_final+' %</div></div>'+
+      '<div class="fila-r"><div class="r1">'+c.kwh.toFixed(1)+' kWh</div><div class="r2">'+euros(c.kwh*c.precio_kwh)+'</div></div></div>';
+  }).join('');
+
+  aplicarIconos();
+}
+var editandoCarga = null;
+var filtroCargaActivo = 'todo';
+function renderCargas(){
+  var cargas = DATOS.cargas.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  var totalKwh=0, totalCoste=0, casaKwh=0, casaCoste=0, scKwh=0, scCoste=0;
+  cargas.forEach(function(c){
+    var coste = c.kwh*c.precio_kwh;
+    totalKwh += c.kwh; totalCoste += coste;
+    if(c.tipo==='domestica'){ casaKwh+=c.kwh; casaCoste+=coste; }
+    if(c.tipo==='supercharger'){ scKwh+=c.kwh; scCoste+=coste; }
+  });
+  document.getElementById('resumen-cargas').innerHTML =
+    '<div class="card"><div class="lbl">'+li('rayo')+'Energía total</div><div class="val">'+totalKwh.toFixed(1)+' kWh</div><div class="sub">'+cargas.length+' cargas registradas</div></div>'+
+    '<div class="card"><div class="lbl">'+li('euro')+'Coste total</div><div class="val">'+euros(totalCoste)+'</div><div class="sub">'+(totalKwh?(totalCoste/totalKwh).toFixed(2):'0')+' €/kWh medio</div></div>'+
+    '<div class="card"><div class="lbl">'+li('home')+'Casa</div><div class="val">'+casaKwh.toFixed(1)+' kWh</div><div class="sub">'+euros(casaCoste)+'</div></div>'+
+    '<div class="card"><div class="lbl">'+li('pin')+'Supercharger</div><div class="val">'+scKwh.toFixed(1)+' kWh</div><div class="sub">'+euros(scCoste)+'</div></div>';
+
+  var filtradas = filtroCargaActivo==='todo' ? cargas : cargas.filter(function(c){ return c.tipo===filtroCargaActivo; });
+
+  document.getElementById('lista-cargas').innerHTML = filtradas.length ? agruparPorMes(filtradas, function(c){
+    var coste = c.kwh*c.precio_kwh;
+    return '<div class="fila">'+
+      '<div class="ico carga" data-icon="rayo"></div>'+
+      '<div class="fila-tx" data-editar-carga="'+c.id+'"><div class="t1">'+c.lugar+'</div>'+
+      '<div class="t2">'+fechaCorta(c.fecha)+' · '+c.bateria_inicial+' % → '+c.bateria_final+' %</div></div>'+
+      '<div class="fila-r"><div class="r1">'+c.kwh.toFixed(1)+' kWh</div><div class="r2">'+euros(coste)+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-carga="'+c.id+'" data-icon="papelera"></div>'+
+      '</div>';
+  }) : '<div class="vacio"><span class="em">⚡</span><p>'+(filtroCargaActivo==='todo' ? 'Todavía no hay cargas. Añade la primera con "+ Añadir".' : 'Sin cargas de este tipo.')+'</p></div>';
+
+  aplicarIconos();
+}
+function abrirFormCarga(c){
+  editandoCarga = c ? c.id : null;
+  document.getElementById('fc-fecha').value = c ? c.fecha : '';
+  document.getElementById('fc-lugar').value = c ? c.lugar : '';
+  document.getElementById('fc-tipo').value = c ? c.tipo : 'domestica';
+  document.getElementById('fc-kwh').value = c ? c.kwh : '';
+  document.getElementById('fc-precio').value = c ? c.precio_kwh : '';
+  document.getElementById('fc-bini').value = c ? c.bateria_inicial : '';
+  document.getElementById('fc-bfin').value = c ? c.bateria_final : '';
+  document.getElementById('fc-guardar').textContent = c ? 'Guardar cambios' : 'Guardar carga';
+  formCarga.classList.remove('form-oculto');
+}
+
+/* ---------- Render: Gastos / Economía ---------- */
+var editandoGasto = null;
+function renderGastos(){
+  var gastos = DATOS.gastos.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  var totalGastos = gastos.reduce(function(s,g){ return s+g.importe; }, 0);
+  var totalEnergia = DATOS.cargas.reduce(function(s,c){ return s+c.kwh*c.precio_kwh; }, 0);
+  var totalGeneral = totalGastos + totalEnergia;
+
+  var filas = '<div class="fila"><div class="fila-tx"><div class="t1">Energía</div><div class="t2">Cargas registradas</div></div>'+
+    '<div class="fila-r"><div class="r1">'+euros(totalEnergia)+'</div></div></div>';
+  filas += gastos.map(function(g){
+    return '<div class="fila"><div class="fila-tx" data-editar-gasto="'+g.id+'"><div class="t1">'+NOMBRE_CAT[g.categoria]+'</div>'+
+      '<div class="t2">'+g.concepto+' · '+new Date(g.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+euros(g.importe)+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-gasto="'+g.id+'" data-icon="papelera"></div></div>';
+  }).join('');
+  filas += '<div class="fila"><div class="fila-tx"><div class="t1"><b>Total</b></div><div class="t2">Desde la compra</div></div>'+
+    '<div class="fila-r"><div class="r1"><b>'+euros(totalGeneral)+'</b></div></div></div>';
+  document.getElementById('lista-gastos').innerHTML = filas;
+
+  var km = DATOS.vehiculo.odometro_km;
+  document.getElementById('resumen-costes').innerHTML =
+    '<div class="card"><div class="lbl">'+li('euro')+'Coste por km</div><div class="val">'+(totalGeneral/km).toFixed(3)+' €</div><div class="sub">Total / '+km.toLocaleString('es-ES')+' km</div></div>'+
+    '<div class="card"><div class="lbl">'+li('euro')+'Coste mensual</div><div class="val">'+Math.round(totalGeneral/8)+' €</div><div class="sub">Media desde la compra</div></div>';
+  aplicarIconos();
+  renderRecordatorios();
+  renderNeumaticos();
+  renderAccesorios();
+}
+
+/* ---------- Recordatorios de mantenimiento por km ---------- */
+function renderRecordatorios(){
+  var cont = document.getElementById('lista-recordatorios');
+  if(!cont) return;
+  var kmActual = DATOS.vehiculo.odometro_km;
+  var lista = (DATOS.recordatorios||[]).slice().sort(function(a,b){ return a.km_objetivo-b.km_objetivo; });
+
+  var filaSeguro = '';
+  if(DATOS.seguro && DATOS.seguro.fecha_renovacion){
+    var diasRestantes = Math.ceil((new Date(DATOS.seguro.fecha_renovacion) - new Date()) / (1000*3600*24));
+    var vencidoSeguro = diasRestantes <= 0;
+    var cercaSeguro = !vencidoSeguro && diasRestantes <= 30;
+    var colorSeguro = vencidoSeguro ? 'var(--acc)' : (cercaSeguro ? 'var(--warn)' : 'var(--txt3)');
+    var textoSeguro = vencidoSeguro ? 'Venció hace '+Math.abs(diasRestantes)+' días' : 'Quedan '+diasRestantes+' días';
+    filaSeguro = '<div class="fila"><div class="fila-tx"><div class="t1">Renovación del seguro</div>'+
+      '<div class="t2">'+new Date(DATOS.seguro.fecha_renovacion).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'+
+      '<div class="fila-r"><div class="r1" style="color:'+colorSeguro+'">'+textoSeguro+'</div></div></div>';
+  }
+
+  cont.innerHTML = filaSeguro + lista.map(function(r){
+    var restante = r.km_objetivo - kmActual;
+    var vencido = restante <= 0;
+    var cerca = !vencido && restante <= 2000;
+    var color = vencido ? 'var(--acc)' : (cerca ? 'var(--warn)' : 'var(--txt3)');
+    var texto = vencido ? 'Superado hace '+Math.abs(restante).toLocaleString('es-ES')+' km' : 'Faltan '+restante.toLocaleString('es-ES')+' km';
+    return '<div class="fila">'+
+      '<div class="fila-tx"><div class="t1">'+r.concepto+'</div><div class="t2">Objetivo: '+r.km_objetivo.toLocaleString('es-ES')+' km</div></div>'+
+      '<div class="fila-r"><div class="r1" style="color:'+color+'">'+texto+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-recordatorio="'+r.id+'" data-icon="papelera"></div>'+
+      '</div>';
+  }).join('') || (filaSeguro ? '' : '<div class="vacio"><span class="em">🔧</span><p>Sin recordatorios. Añade uno con "+ Añadir".</p></div>');
+  aplicarIconos();
+}
+
+/* ---------- Neumáticos: km recorridos por eje, desde su fecha de instalación ---------- */
+function renderNeumaticos(){
+  var cont = document.getElementById('tarjetas-neumaticos');
+  if(!cont) return;
+  var kmActual = DATOS.vehiculo.odometro_km;
+  var ejes = [
+    { clave:'delanteros', nombre:'Delanteros' },
+    { clave:'traseros', nombre:'Traseros' }
+  ];
+  cont.innerHTML = ejes.map(function(e){
+    var n = DATOS.neumaticos[e.clave];
+    var recorridos = Math.max(0, kmActual - n.km_instalacion);
+    var pctUso = Math.min(100, Math.round(recorridos/n.vida_util_km*100));
+    var color = pctUso>=90 ? 'var(--acc)' : (pctUso>=70 ? 'var(--warn)' : 'var(--ok)');
+    return '<div class="card" data-editar-neumatico="'+e.clave+'" style="cursor:pointer">'+
+      '<div class="lbl">'+e.nombre+'</div>'+
+      '<div class="val">'+recorridos.toLocaleString('es-ES')+' km</div>'+
+      '<div class="sub">Desde '+new Date(n.fecha_instalacion).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})+'</div>'+
+      '<div class="barra" style="margin:10px 0 2px"><i style="width:'+pctUso+'%;background:'+color+'"></i></div>'+
+      '<div class="sub">'+pctUso+' % de su vida útil estimada</div>'+
+      '</div>';
+  }).join('');
+}
+function renderNeumaticos(){
+  var cont = document.getElementById('tarjetas-neumaticos');
+  if(!cont) return;
+  var kmActual = DATOS.vehiculo.odometro_km;
+  var ejes = [
+    { clave:'delanteros', nombre:'Delanteros' },
+    { clave:'traseros', nombre:'Traseros' }
+  ];
+  cont.innerHTML = ejes.map(function(e){
+    var n = DATOS.neumaticos[e.clave];
+    var recorridos = Math.max(0, kmActual - n.km_instalacion);
+    var pctUso = Math.min(100, Math.round(recorridos/n.vida_util_km*100));
+    var color = pctUso>=90 ? 'var(--acc)' : (pctUso>=70 ? 'var(--warn)' : 'var(--ok)');
+    return '<div class="card" data-editar-neumatico="'+e.clave+'" style="cursor:pointer">'+
+      '<div class="lbl">'+e.nombre+'</div>'+
+      '<div class="val">'+recorridos.toLocaleString('es-ES')+' km</div>'+
+      '<div class="sub">Desde '+new Date(n.fecha_instalacion).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})+'</div>'+
+      '<div class="barra" style="margin:10px 0 2px"><i style="width:'+pctUso+'%;background:'+color+'"></i></div>'+
+      '<div class="sub">'+pctUso+' % de su vida útil estimada</div>'+
+      '</div>';
+  }).join('');
+}
+
+/* ---------- Inventario de accesorios y extras ---------- */
+var NOMBRE_CAT_ACC = { proteccion:'Protección', carga:'Carga', confort:'Confort e interior', estetica:'Estética', tecnologia:'Tecnología', otros:'Otros' };
+function renderAccesorios(){
+  var cont = document.getElementById('lista-accesorios');
+  if(!cont) return;
+  var lista = DATOS.accesorios.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  cont.innerHTML = lista.map(function(a){
+    return '<div class="fila">'+
+      '<div class="fila-tx" data-editar-accesorio="'+a.id+'"><div class="t1">'+a.nombre+'</div>'+
+      '<div class="t2">'+NOMBRE_CAT_ACC[a.categoria]+' · '+new Date(a.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+euros(a.precio)+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-accesorio="'+a.id+'" data-icon="papelera"></div>'+
+      '</div>';
+  }).join('') || '<div class="vacio"><span class="em">🎒</span><p>Sin accesorios registrados todavía.</p></div>';
+
+  var total = DATOS.accesorios.reduce(function(s,a){ return s+a.precio; }, 0);
+  document.getElementById('total-accesorios').textContent = lista.length+' accesorios · '+euros(total)+' en total';
+}
+var editandoAccesorio = null;
+function abrirFormAccesorio(a){
+  editandoAccesorio = a ? a.id : null;
+  document.getElementById('fa-nombre').value = a ? a.nombre : '';
+  document.getElementById('fa-categoria').value = a ? a.categoria : 'proteccion';
+  document.getElementById('fa-fecha').value = a ? a.fecha : '';
+  document.getElementById('fa-precio').value = a ? a.precio : '';
+  document.getElementById('fa-guardar').textContent = a ? 'Guardar cambios' : 'Guardar';
+  document.getElementById('form-accesorio').classList.remove('form-oculto');
+}
+document.getElementById('btn-add-accesorio').addEventListener('click', function(){
+  var f = document.getElementById('form-accesorio');
+  if(f.classList.contains('form-oculto')) abrirFormAccesorio(null);
+  else f.classList.add('form-oculto');
+});
+document.getElementById('fa-cancelar').addEventListener('click', function(){
+  document.getElementById('form-accesorio').classList.add('form-oculto');
+});
+document.getElementById('fa-guardar').addEventListener('click', function(){
+  var nombre = document.getElementById('fa-nombre').value.trim();
+  var fecha = document.getElementById('fa-fecha').value;
+  var precio = parseFloat(document.getElementById('fa-precio').value);
+  if(!nombre || !fecha || isNaN(precio)){ toast('Completa nombre, fecha y precio.', true); return; }
+  var datos = { nombre:nombre, categoria:document.getElementById('fa-categoria').value, fecha:fecha, precio:precio };
+  if(editandoAccesorio){
+    var a = DATOS.accesorios.find(function(x){ return x.id===editandoAccesorio; });
+    Object.assign(a, datos);
+  } else {
+    datos.id = 'a'+Date.now();
+    DATOS.accesorios.push(datos);
+  }
+  guardarDatos();
+  document.getElementById('form-accesorio').classList.add('form-oculto');
+  renderAccesorios();
+  toast(editandoAccesorio ? 'Accesorio actualizado' : 'Accesorio añadido');
+});
+document.getElementById('lista-accesorios').addEventListener('click', function(e){
+  var borrar = e.target.closest('[data-borrar-accesorio]');
+  if(borrar){
+    confirmarAccion('Eliminar accesorio', 'Se borrará este accesorio del inventario.', function(){
+      DATOS.accesorios = DATOS.accesorios.filter(function(a){ return a.id!==borrar.dataset.borrarAccesorio; });
+      guardarDatos(); renderAccesorios();
+      toast('Accesorio eliminado');
+    });
+    return;
+  }
+  var editar = e.target.closest('[data-editar-accesorio]');
+  if(editar){
+    abrirFormAccesorio(DATOS.accesorios.find(function(a){ return a.id===editar.dataset.editarAccesorio; }));
+  }
+});
+
+function abrirFormNeumatico(eje){
+  var n = DATOS.neumaticos[eje];
+  document.getElementById('fn-titulo').textContent = 'Neumáticos '+(eje==='delanteros'?'delanteros':'traseros');
+  document.getElementById('fn-fecha').value = n.fecha_instalacion;
+  document.getElementById('fn-km').value = n.km_instalacion;
+  document.getElementById('fn-vida').value = n.vida_util_km;
+  document.getElementById('form-neumatico').dataset.eje = eje;
+  document.getElementById('form-neumatico').classList.remove('form-oculto');
+}
+document.getElementById('tarjetas-neumaticos').addEventListener('click', function(e){
+  var tarjeta = e.target.closest('[data-editar-neumatico]');
+  if(tarjeta) abrirFormNeumatico(tarjeta.dataset.editarNeumatico);
+});
+document.getElementById('fn-cancelar').addEventListener('click', function(){
+  document.getElementById('form-neumatico').classList.add('form-oculto');
+});
+document.getElementById('fn-guardar').addEventListener('click', function(){
+  var eje = document.getElementById('form-neumatico').dataset.eje;
+  var fecha = document.getElementById('fn-fecha').value;
+  var km = parseInt(document.getElementById('fn-km').value);
+  var vida = parseInt(document.getElementById('fn-vida').value) || 45000;
+  if(!fecha || isNaN(km)){ toast('Completa la fecha y el kilómetro de instalación.', true); return; }
+  DATOS.neumaticos[eje] = { fecha_instalacion:fecha, km_instalacion:km, vida_util_km:vida };
+  guardarDatos();
+  document.getElementById('form-neumatico').classList.add('form-oculto');
+  renderNeumaticos();
+  toast('Neumáticos actualizados');
+});
+
+function abrirFormGasto(g){
+  editandoGasto = g ? g.id : null;
+  document.getElementById('fg-fecha').value = g ? g.fecha : '';
+  document.getElementById('fg-categoria').value = g ? g.categoria : 'seguro';
+  document.getElementById('fg-concepto').value = g ? g.concepto : '';
+  document.getElementById('fg-importe').value = g ? g.importe : '';
+  document.getElementById('fg-guardar').textContent = g ? 'Guardar cambios' : 'Guardar gasto';
+  formGasto.classList.remove('form-oculto');
+}
+
+/* ---------- Formulario: nuevo/editar viaje ---------- */
+var formViaje = document.getElementById('form-viaje');
+document.getElementById('btn-add-viaje').addEventListener('click', function(){
+  if(formViaje.classList.contains('form-oculto')) abrirFormViaje(null);
+  else formViaje.classList.add('form-oculto');
+});
+document.getElementById('fv-cancelar').addEventListener('click', function(){
+  formViaje.classList.add('form-oculto');
+});
+document.getElementById('fv-guardar').addEventListener('click', function(){
+  var km = parseFloat(document.getElementById('fv-km').value);
+  var fecha = document.getElementById('fv-fecha').value;
+  var origen = document.getElementById('fv-origen').value.trim();
+  var destino = document.getElementById('fv-destino').value.trim();
+  if(!fecha || !origen || !destino || isNaN(km)){
+    toast('Completa al menos fecha, origen, destino y km.', true);
+    return;
+  }
+  var datos = {
+    fecha: fecha, origen: origen, destino: destino, km: km,
+    duracion_min: parseInt(document.getElementById('fv-duracion').value) || 0,
+    bateria_inicial: parseInt(document.getElementById('fv-bini').value) || 0,
+    bateria_final: parseInt(document.getElementById('fv-bfin').value) || 0,
+    etiqueta: document.getElementById('fv-etiqueta').value,
+    conductor: document.getElementById('fv-conductor').value.trim()
+  };
+  if(editandoViaje){
+    var v = DATOS.viajes.find(function(x){ return x.id===editandoViaje; });
+    Object.assign(v, datos);
+  } else {
+    datos.id = 'v'+Date.now();
+    DATOS.viajes.push(datos);
+  }
+  guardarDatos();
+  ['fv-fecha','fv-origen','fv-destino','fv-km','fv-duracion','fv-bini','fv-bfin'].forEach(function(id){ document.getElementById(id).value=''; });
+  formViaje.classList.add('form-oculto');
+  renderViajes();
+  renderDashboard();
+  renderEstadisticas();
+  toast(editandoViaje ? 'Viaje actualizado' : 'Viaje añadido');
+});
+function manejarToggleMes(e){
+  var cab = e.target.closest('[data-toggle-mes]');
+  if(!cab) return false;
+  var clave = cab.dataset.toggleMes;
+  var filas = cab.parentElement.querySelector('[data-mes="'+clave+'"]');
+  var abrir = filas.style.display === 'none';
+  filas.style.display = abrir ? '' : 'none';
+  cab.querySelector('.chevron').textContent = abrir ? '—' : '+';
+  return true;
+}
+document.getElementById('lista-viajes').addEventListener('click', function(e){
+  if(manejarToggleMes(e)) return;
+  var borrar = e.target.closest('[data-borrar-viaje]');
+  if(borrar){
+    confirmarAccion('Eliminar viaje', 'Se borrará este viaje del historial.', function(){
+      DATOS.viajes = DATOS.viajes.filter(function(v){ return v.id!==borrar.dataset.borrarViaje; });
+      guardarDatos(); renderViajes(); renderDashboard(); renderEstadisticas();
+      toast('Viaje eliminado');
+    });
+    return;
+  }
+  var editar = e.target.closest('[data-editar-viaje]');
+  if(editar){
+    abrirFormViaje(DATOS.viajes.find(function(v){ return v.id===editar.dataset.editarViaje; }));
+  }
+});
+
+/* ---------- Formulario: nueva/editar carga ---------- */
+var formCarga = document.getElementById('form-carga');
+document.getElementById('btn-add-carga').addEventListener('click', function(){
+  if(formCarga.classList.contains('form-oculto')) abrirFormCarga(null);
+  else formCarga.classList.add('form-oculto');
+});
+document.getElementById('fc-cancelar').addEventListener('click', function(){
+  formCarga.classList.add('form-oculto');
+});
+function sugerirPrecioCasa(){
+  var tipo = document.getElementById('fc-tipo').value;
+  var fecha = document.getElementById('fc-fecha').value;
+  if(tipo!=='domestica' || !fecha || editandoCarga) return; // no pisar un valor ya guardado al editar
+  var precio = precioSegunHora(fecha, cargarTarifa());
+  document.getElementById('fc-precio').value = precio;
+}
+document.getElementById('fc-tipo').addEventListener('change', sugerirPrecioCasa);
+document.getElementById('fc-fecha').addEventListener('change', sugerirPrecioCasa);
+document.getElementById('fc-guardar').addEventListener('click', function(){
+  var kwh = parseFloat(document.getElementById('fc-kwh').value);
+  var precio = parseFloat(document.getElementById('fc-precio').value);
+  var fecha = document.getElementById('fc-fecha').value;
+  var lugar = document.getElementById('fc-lugar').value.trim();
+  if(!fecha || !lugar || isNaN(kwh) || isNaN(precio)){
+    toast('Completa al menos fecha, lugar, kWh y €/kWh.', true);
+    return;
+  }
+  var datos = {
+    fecha: fecha, lugar: lugar, tipo: document.getElementById('fc-tipo').value,
+    kwh: kwh, precio_kwh: precio,
+    bateria_inicial: parseInt(document.getElementById('fc-bini').value) || 0,
+    bateria_final: parseInt(document.getElementById('fc-bfin').value) || 0
+  };
+  if(editandoCarga){
+    var c = DATOS.cargas.find(function(x){ return x.id===editandoCarga; });
+    Object.assign(c, datos);
+  } else {
+    datos.id = 'c'+Date.now();
+    DATOS.cargas.push(datos);
+  }
+  guardarDatos();
+  ['fc-fecha','fc-lugar','fc-kwh','fc-precio','fc-bini','fc-bfin'].forEach(function(id){ document.getElementById(id).value=''; });
+  formCarga.classList.add('form-oculto');
+  renderCargas();
+  renderDashboard();
+  renderBateria();
+  renderGastos();
+  renderEstadisticas();
+  toast(editandoCarga ? 'Carga actualizada' : 'Carga añadida');
+});
+document.getElementById('lista-cargas').addEventListener('click', function(e){
+  if(manejarToggleMes(e)) return;
+  var borrar = e.target.closest('[data-borrar-carga]');
+  if(borrar){
+    confirmarAccion('Eliminar carga', 'Se borrará esta carga del historial.', function(){
+      DATOS.cargas = DATOS.cargas.filter(function(c){ return c.id!==borrar.dataset.borrarCarga; });
+      guardarDatos(); renderCargas(); renderDashboard(); renderBateria(); renderGastos(); renderEstadisticas();
+      toast('Carga eliminada');
+    });
+    return;
+  }
+  var editar = e.target.closest('[data-editar-carga]');
+  if(editar){
+    abrirFormCarga(DATOS.cargas.find(function(c){ return c.id===editar.dataset.editarCarga; }));
+  }
+});
+
+/* ---------- Formulario: nuevo/editar gasto ---------- */
+var formGasto = document.getElementById('form-gasto');
+document.getElementById('btn-add-gasto').addEventListener('click', function(){
+  if(formGasto.classList.contains('form-oculto')) abrirFormGasto(null);
+  else formGasto.classList.add('form-oculto');
+});
+document.getElementById('fg-cancelar').addEventListener('click', function(){
+  formGasto.classList.add('form-oculto');
+});
+document.getElementById('fg-guardar').addEventListener('click', function(){
+  var importe = parseFloat(document.getElementById('fg-importe').value);
+  var fecha = document.getElementById('fg-fecha').value;
+  var concepto = document.getElementById('fg-concepto').value.trim();
+  if(!fecha || !concepto || isNaN(importe)){
+    toast('Completa al menos fecha, concepto e importe.', true);
+    return;
+  }
+  var datos = { fecha: fecha, categoria: document.getElementById('fg-categoria').value, concepto: concepto, importe: importe };
+  if(editandoGasto){
+    var g = DATOS.gastos.find(function(x){ return x.id===editandoGasto; });
+    Object.assign(g, datos);
+  } else {
+    datos.id = 'g'+Date.now();
+    DATOS.gastos.push(datos);
+  }
+  guardarDatos();
+  ['fg-fecha','fg-concepto','fg-importe'].forEach(function(id){ document.getElementById(id).value=''; });
+  formGasto.classList.add('form-oculto');
+  renderGastos();
+  renderDashboard();
+  toast(editandoGasto ? 'Gasto actualizado' : 'Gasto añadido');
+});
+document.getElementById('lista-gastos').addEventListener('click', function(e){
+  var borrar = e.target.closest('[data-borrar-gasto]');
+  if(borrar){
+    confirmarAccion('Eliminar gasto', 'Se borrará este gasto del registro.', function(){
+      DATOS.gastos = DATOS.gastos.filter(function(g){ return g.id!==borrar.dataset.borrarGasto; });
+      guardarDatos(); renderGastos(); renderDashboard();
+      toast('Gasto eliminado');
+    });
+    return;
+  }
+  var editar = e.target.closest('[data-editar-gasto]');
+  if(editar){
+    abrirFormGasto(DATOS.gastos.find(function(g){ return g.id===editar.dataset.editarGasto; }));
+  }
+});
+
+/* ---------- Formulario: nuevo recordatorio de mantenimiento ---------- */
+var formRecordatorio = document.getElementById('form-recordatorio');
+document.getElementById('btn-add-recordatorio').addEventListener('click', function(){
+  formRecordatorio.classList.toggle('form-oculto');
+});
+document.getElementById('fr-cancelar').addEventListener('click', function(){
+  formRecordatorio.classList.add('form-oculto');
+});
+document.getElementById('fr-guardar').addEventListener('click', function(){
+  var concepto = document.getElementById('fr-concepto').value.trim();
+  var km = parseInt(document.getElementById('fr-km').value);
+  if(!concepto || !km){ toast('Completa concepto y kilómetro objetivo.', true); return; }
+  if(!DATOS.recordatorios) DATOS.recordatorios = [];
+  DATOS.recordatorios.push({ id:'r'+Date.now(), concepto:concepto, km_objetivo:km });
+  guardarDatos();
+  document.getElementById('fr-concepto').value = '';
+  document.getElementById('fr-km').value = '';
+  formRecordatorio.classList.add('form-oculto');
+  renderRecordatorios();
+  toast('Recordatorio añadido');
+});
+document.getElementById('lista-recordatorios').addEventListener('click', function(e){
+  var borrar = e.target.closest('[data-borrar-recordatorio]');
+  if(!borrar) return;
+  confirmarAccion('Eliminar recordatorio', 'Se borrará este recordatorio.', function(){
+    DATOS.recordatorios = DATOS.recordatorios.filter(function(r){ return r.id!==borrar.dataset.borrarRecordatorio; });
+    guardarDatos(); renderRecordatorios();
+    toast('Recordatorio eliminado');
+  });
+});
+
+/* ---------- Iconos SVG (trazo, estilo SF Symbols) ---------- */
+var ICONOS = {
+  home: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/>',
+  rayo: '<path d="M13 3 5 14h5l-1 8 9-12h-5l1-7z" stroke-linejoin="round"/>',
+  ruta: '<circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="17" r="2.4"/><path d="M6 9.4V13a4 4 0 0 0 4 4h4"/>',
+  bateria: '<rect x="3" y="8" width="16" height="8" rx="2"/><path d="M21 10.5v3"/><rect x="5.5" y="10" width="4" height="4" fill="currentColor" stroke="none"/>',
+  euro: '<path d="M17 6.5A6.5 6.5 0 1 0 17 17.5"/><path d="M6 10h9M6 14h7"/>',
+  stats: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  ajustes: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.4 2.3-.9c.6.5 1.3.9 2 1.2L10 21h4l.4-2.6c.7-.3 1.4-.7 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/>',
+  pin: '<path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/>',
+  papelera: '<path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/>',
+  estrella: '<path d="M12 3.5 14.7 9 21 9.8l-4.5 4.2 1.2 6.2L12 17.2 6.3 20.2l1.2-6.2L3 9.8 9.3 9Z" stroke-linejoin="round" fill="currentColor"/>',
+  termometro: '<path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/><path d="M12 9v5"/>'
+};
+function aplicarIconos(){
+  document.querySelectorAll('[data-icon]').forEach(function(el){
+    var d = ICONOS[el.dataset.icon];
+    if(!d || el.dataset.pintado) return;
+    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">'+d+'</svg>';
+    el.dataset.pintado = '1';
+  });
+}
+function li(nombre){
+  return '<span class="ic-lbl" data-icon="'+nombre+'"></span>';
+}
+aplicarIconos();
+
+/* ---------- Navegación ---------- */
+var btns = document.querySelectorAll('.nav button');
+var vistas = {
+  dashboard: document.getElementById('vista-dashboard'),
+  cargas: document.getElementById('vista-cargas'),
+  viajes: document.getElementById('vista-viajes'),
+  mapa: document.getElementById('vista-mapa'),
+  bateria: document.getElementById('vista-bateria'),
+  economia: document.getElementById('vista-economia'),
+  estadisticas: document.getElementById('vista-estadisticas'),
+  ajustes: document.getElementById('vista-ajustes'),
+  proximamente: document.getElementById('vista-proximamente')
+};
+function mostrar(nombre){
+  var clave = vistas[nombre] ? nombre : 'proximamente';
+  Object.keys(vistas).forEach(function(k){ vistas[k].style.display = (k === clave) ? '' : 'none'; });
+  btns.forEach(function(x){ x.classList.toggle('on', x.dataset.vista === clave); });
+  window.scrollTo(0,0);
+  if(clave === 'mapa'){
+    iniciarMapa();
+    renderLugares();
+    renderPlanes();
+    cargarClimaYAjustarAutonomia();
+    setTimeout(function(){ if(mapaLeaflet) mapaLeaflet.invalidateSize(); }, 80);
+  }
+}
+btns.forEach(function(b){ b.addEventListener('click', function(){ mostrar(b.dataset.vista); }); });
+document.querySelectorAll('[data-goto]').forEach(function(el){
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', function(){ mostrar(el.dataset.goto); });
+});
+
+/* ---------- Gráfico: evolución de batería (línea), leído de DATOS ---------- */
+function dibujarChartBateria(){
+  var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var datos = DATOS.bateria_historico.map(function(h){
+    var d = new Date(h.fecha);
+    return { m: MESES[d.getMonth()], v: h.capacidad_pct };
+  });
+  var w=290, h=120, pad=18;
+  var valores = datos.map(function(d){return d.v;});
+  var min = Math.min.apply(null,valores)-1, max = Math.max.apply(null,valores)+0.5;
+  var pts = datos.map(function(d,i){
+    var x = pad + i*(w-2*pad)/Math.max(datos.length-1,1);
+    var y = h-pad - (d.v-min)/(max-min)*(h-2*pad);
+    return [x,y];
+  });
+  var linea = pts.map(function(p,i){ return (i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1); }).join(' ');
+  var area = linea + ' L'+pts[pts.length-1][0]+','+(h-pad)+' L'+pts[0][0]+','+(h-pad)+' Z';
+  var puntos = pts.map(function(p){
+    return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.2" fill="#0a84ff"/>';
+  }).join('');
+  var labels = datos.map(function(d,i){
+    return '<text x="'+pts[i][0]+'" y="'+(h-2)+'" font-size="10" fill="var(--txt3)" text-anchor="middle">'+d.m+'</text>';
+  }).join('');
+  document.getElementById('chart-bateria').innerHTML =
+    '<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="overflow:visible">' +
+    '<defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0" stop-color="#0a84ff" stop-opacity=".22"/>'+
+    '<stop offset="1" stop-color="#0a84ff" stop-opacity="0"/></linearGradient></defs>'+
+    '<path d="'+area+'" fill="url(#gb)"/>'+
+    '<path d="'+linea+'" fill="none" stroke="#0a84ff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'+
+    puntos + labels + '</svg>';
+}
+
+/* ---------- Gráfico: kilómetros por mes (barras) ---------- */
+(function(){
+  var datos = [
+    {m:'Abr', v:410}, {m:'May', v:520}, {m:'Jun', v:380},
+    {m:'Jul', v:610}, {m:'Ago', v:340}, {m:'Sep', v:312}
+  ];
+  var w=290, h=130, pad=20, bw=28, gap=(w-2*pad-bw*datos.length)/(datos.length-1);
+  var max = Math.max.apply(null, datos.map(function(d){return d.v;}));
+  var barras = datos.map(function(d,i){
+    var x = pad + i*(bw+gap);
+    var bh = (d.v/max)*(h-pad-24);
+    var y = h-24-bh;
+    return '<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+bh+'" rx="6" fill="'+(i===datos.length-1?'#e8342a':'rgba(10,132,255,.55)')+'"/>'+
+      '<text x="'+(x+bw/2)+'" y="'+(h-8)+'" font-size="10" fill="var(--txt3)" text-anchor="middle">'+d.m+'</text>';
+  }).join('');
+  document.getElementById('chart-km-mes').innerHTML =
+    '<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="overflow:visible">'+barras+'</svg>';
+})();
+
+/* ---------- Conexión Tesla (OAuth) — activable cuando tengas Client ID + backend ---------- */
+function cargarConfigTesla(){
+  try{ return JSON.parse(localStorage.getItem('mitesla-tesla-config')) || {}; }
+  catch(e){ return {}; }
+}
+function guardarConfigTesla(cfg){ localStorage.setItem('mitesla-tesla-config', JSON.stringify(cfg)); }
+
+document.getElementById('tesla-guardar-config').addEventListener('click', function(){
+  var cfg = {
+    clientId: document.getElementById('tesla-client-id').value.trim(),
+    backendUrl: document.getElementById('tesla-backend-url').value.trim().replace(/\/$/,'')
+  };
+  guardarConfigTesla(cfg);
+  document.getElementById('tesla-estado').textContent = 'Configuración guardada en este dispositivo.';
+  document.getElementById('tesla-estado').style.color = 'var(--txt3)';
+});
+
+document.getElementById('tesla-conectar').addEventListener('click', function(){
+  var cfg = cargarConfigTesla();
+  var estado = document.getElementById('tesla-estado');
+  if(!cfg.clientId || !cfg.backendUrl){
+    estado.textContent = 'Falta el Client ID o la URL del backend. Guarda la configuración primero.';
+    estado.style.color = 'var(--acc)';
+    return;
+  }
+  var redirectUri = cfg.backendUrl + '/callback';
+  var scope = 'openid vehicle_device_data vehicle_location offline_access';
+  var url = 'https://auth.tesla.com/oauth2/v3/authorize'
+    + '?client_id=' + encodeURIComponent(cfg.clientId)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&response_type=code'
+    + '&scope=' + encodeURIComponent(scope)
+    + '&state=' + Math.random().toString(36).slice(2);
+  window.location.href = url;
+});
+
+/* ---------- Mapa real (Leaflet + OpenStreetMap, sin clave de API) ---------- */
+var LUGARES = [
+  { nombre:'Casa', tipo:'casa', lat:43.5357, lng:-5.6615, info:'Punto de carga habitual' },
+  { nombre:'Supercharger Gijón', tipo:'supercharger', lat:43.5231, lng:-5.6738, info:'Parque Astur' },
+  { nombre:'Oviedo', tipo:'destino', lat:43.3619, lng:-5.8494, info:'Destino frecuente · 28,4 km' },
+  { nombre:'Aeropuerto de Asturias', tipo:'destino', lat:43.5636, lng:-6.0347, info:'62,7 km desde casa' }
+];
+// Alias de nombres habituales -> coordenadas conocidas, para poder trazar viajes sin pedir geocodificación real.
+var COORDS_LUGAR = {
+  'casa': LUGARES[0], 'gijon': LUGARES[0], 'gijón': LUGARES[0],
+  'supercharger gijon': LUGARES[1], 'supercharger gijón': LUGARES[1],
+  'oviedo': LUGARES[2],
+  'aeropuerto de asturias': LUGARES[3], 'aeropuerto': LUGARES[3]
+};
+function normalizarTexto(t){
+  return (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function coordDeLugar(nombre){
+  return COORDS_LUGAR[normalizarTexto(nombre)] || null;
+}
+var mapaLeaflet = null;
+function renderLugares(){
+  var cont = document.getElementById('lista-lugares');
+  if(!cont) return;
+
+  var cargasCasa = DATOS.cargas.filter(function(c){ return c.tipo==='domestica'; });
+  var kwhCasa = cargasCasa.reduce(function(s,c){ return s+c.kwh; }, 0);
+
+  var cargasSC = DATOS.cargas.filter(function(c){ return c.tipo==='supercharger'; });
+
+  // destino más frecuente por número de viajes
+  var conteoDestinos = {};
+  DATOS.viajes.forEach(function(v){
+    if(!conteoDestinos[v.destino]) conteoDestinos[v.destino] = { n:0, km:v.km };
+    conteoDestinos[v.destino].n++;
+  });
+  var destinos = Object.keys(conteoDestinos).sort(function(a,b){ return conteoDestinos[b].n - conteoDestinos[a].n; });
+  var destinoTop = destinos[0];
+
+  var filas = [];
+  filas.push('<div class="fila">'+
+    '<div class="ico" style="background:rgba(10,132,255,.12);color:var(--acc2)" data-icon="pin"></div>'+
+    '<div class="fila-tx"><div class="t1">Casa</div><div class="t2">'+cargasCasa.length+' cargas · '+kwhCasa.toFixed(1)+' kWh</div></div>'+
+    '<div class="fila-r"><div class="r1">'+cargasCasa.length+' cargas</div></div></div>');
+  filas.push('<div class="fila">'+
+    '<div class="ico carga" data-icon="rayo"></div>'+
+    '<div class="fila-tx"><div class="t1">Supercharger Gijón</div><div class="t2">Parque Astur</div></div>'+
+    '<div class="fila-r"><div class="r1">'+cargasSC.length+' cargas</div></div></div>');
+  if(destinoTop){
+    filas.push('<div class="fila">'+
+      '<div class="ico" style="background:rgba(232,52,42,.12);color:var(--acc)" data-icon="pin"></div>'+
+      '<div class="fila-tx"><div class="t1">'+destinoTop+'</div><div class="t2">Destino más frecuente · '+conteoDestinos[destinoTop].n+' viajes</div></div>'+
+      '<div class="fila-r"><div class="r1">'+conteoDestinos[destinoTop].km.toFixed(1)+' km</div></div></div>');
+  }
+  (DATOS.favoritos||[]).forEach(function(f){
+    filas.push('<div class="fila">'+
+      '<div class="ico" style="background:rgba(142,68,236,.12);color:#8e44ec" data-icon="estrella"></div>'+
+      '<div class="fila-tx"><div class="t1">'+f.nombre+'</div><div class="t2">Cargador favorito</div></div>'+
+      '<div class="btn-borrar" data-quitar-favorito="'+f.id+'" data-icon="papelera"></div></div>');
+  });
+  cont.innerHTML = filas.join('');
+  aplicarIconos();
+}
+document.getElementById('lista-lugares').addEventListener('click', function(e){
+  var btn = e.target.closest('[data-quitar-favorito]');
+  if(!btn) return;
+  DATOS.favoritos = DATOS.favoritos.filter(function(f){ return f.id!==btn.dataset.quitarFavorito; });
+  guardarDatos();
+  renderLugares();
+  if(mapaLeaflet) pintarFavoritosEnMapa();
+  toast('Quitado de favoritos');
+});
+
+var leafletCargando = null;
+function cargarLeafletSiHaceFalta(){
+  if(window.L) return Promise.resolve();
+  if(leafletCargando) return leafletCargando;
+  leafletCargando = new Promise(function(resolve, reject){
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+
+    var script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return leafletCargando;
+}
+
+async function iniciarMapa(){
+  if(mapaLeaflet || !document.getElementById('leaflet-map')) return;
+  var mapaEl = document.getElementById('leaflet-map');
+  mapaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--txt3);font-size:13px">Cargando mapa…</div>';
+  try{
+    await cargarLeafletSiHaceFalta();
+  }catch(e){
+    mapaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--txt3);font-size:13px">No se pudo cargar el mapa. Revisa tu conexión.</div>';
+    return;
+  }
+  mapaEl.innerHTML = '';
+
+  mapaLeaflet = L.map('leaflet-map', { zoomControl:false }).setView([43.49, -5.75], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 18
+  }).addTo(mapaLeaflet);
+
+  var colores = { casa:'#0a84ff', supercharger:'#2fae60', destino:'#e8342a' };
+  LUGARES.forEach(function(l){
+    L.circleMarker([l.lat,l.lng], {
+      radius:8, color:'#fff', weight:2, fillColor:colores[l.tipo], fillOpacity:1
+    }).addTo(mapaLeaflet).bindPopup('<b>'+l.nombre+'</b><br>'+l.info);
+  });
+
+  dibujarRutas('mes');
+  pintarFavoritosEnMapa();
+  mapaLeaflet.invalidateSize();
+}
+
+var capaFavoritos = null;
+function pintarFavoritosEnMapa(){
+  if(capaFavoritos){ mapaLeaflet.removeLayer(capaFavoritos); capaFavoritos = null; }
+  capaFavoritos = L.layerGroup();
+  (DATOS.favoritos||[]).forEach(function(f){
+    L.circleMarker([f.lat,f.lng], {
+      radius:7, color:'#fff', weight:2, fillColor:'#8e44ec', fillOpacity:1
+    }).bindPopup('<b>★ '+f.nombre+'</b><br>Cargador favorito').addTo(capaFavoritos);
+  });
+  capaFavoritos.addTo(mapaLeaflet);
+}
+
+/* ---------- Mis rutas: mapa de calor de viajes por periodo (estilo Strava) ---------- */
+var capaRutas = null;
+function dibujarRutas(periodo){
+  if(capaRutas){ mapaLeaflet.removeLayer(capaRutas); capaRutas = null; }
+  var estado = document.getElementById('rutas-estado');
+  if(periodo === 'ninguno'){ estado.textContent = 'Rutas ocultas.'; return; }
+
+  var ahora = new Date();
+  var viajesPeriodo = DATOS.viajes.filter(function(v){
+    var d = new Date(v.fecha);
+    if(periodo==='semana') return (ahora-d) <= 7*24*3600*1000;
+    if(periodo==='mes') return d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth();
+    if(periodo==='año') return d.getFullYear()===ahora.getFullYear();
+    return true; // todo
+  });
+
+  var conteoTramos = {}; // para dar más intensidad a las rutas repetidas
+  var trazables = [];
+  viajesPeriodo.forEach(function(v){
+    var o = coordDeLugar(v.origen), d = coordDeLugar(v.destino);
+    if(!o || !d) return;
+    var clave = [o.nombre, d.nombre].sort().join('|');
+    conteoTramos[clave] = (conteoTramos[clave]||0) + 1;
+    trazables.push({ o:o, d:d, clave:clave });
+  });
+
+  capaRutas = L.layerGroup();
+  trazables.forEach(function(t){
+    var veces = conteoTramos[t.clave];
+    L.polyline([[t.o.lat,t.o.lng],[t.d.lat,t.d.lng]], {
+      color:'#0a84ff', weight: Math.min(2+veces*1.5, 10), opacity: Math.min(0.18+veces*0.12, 0.85)
+    }).addTo(capaRutas);
+  });
+  capaRutas.addTo(mapaLeaflet);
+
+  var sinCoords = viajesPeriodo.length - trazables.length;
+  estado.textContent = trazables.length+' de '+viajesPeriodo.length+' viajes trazados en el mapa'+
+    (sinCoords>0 ? ' ('+sinCoords+' con lugares no reconocidos)' : '') + '.';
+}
+document.getElementById('filtros-rutas').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-periodo]');
+  if(!btn || !mapaLeaflet) return;
+  document.querySelectorAll('#filtros-rutas button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  dibujarRutas(btn.dataset.periodo);
+});
+
+/* ---------- Autonomía real (a partir del consumo medio de tus viajes, no solo WLTP) ---------- */
+function autonomiaRealKm(){
+  var s = statsViajes();
+  var hist = DATOS.bateria_historico;
+  var bateriaActual = hist[hist.length-1].capacidad_pct;
+  var capacidadKwh = DATOS.vehiculo.capacidad_nominal_kwh * bateriaActual/100;
+  var consumo = s.media>0 ? s.media : 16; // kWh/100km de referencia si aún no hay viajes
+  return { km: Math.round(capacidadKwh/consumo*100), consumo: consumo, capacidadKwh: capacidadKwh, velRef: s.velMedia>0?s.velMedia:60 };
+}
+// Ajusta el consumo a otra velocidad media, por el peso creciente de la resistencia aerodinámica (estilo ABRP/Reve).
+function consumoAVelocidad(consumoBase, velRef, velObjetivo){
+  if(!velObjetivo || velObjetivo<=0) return consumoBase;
+  var factor = Math.pow(velObjetivo/velRef, 2);
+  factor = Math.max(0.7, Math.min(2, factor)); // límites razonables
+  return consumoBase * factor;
+}
+
+/* ---------- Clima real y su efecto en la autonomía (estilo ABRP, con Open-Meteo, gratis y sin clave) ---------- */
+var climaCargado = false;
+async function cargarClimaYAjustarAutonomia(){
+  if(climaCargado) return;
+  climaCargado = true;
+  var casa = LUGARES[0];
+  try{
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude='+casa.lat+'&longitude='+casa.lng+
+      '&current=temperature_2m&timezone=Europe%2FMadrid';
+    var res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    var json = await res.json();
+    var temp = json.current.temperature_2m;
+
+    // Pérdida de autonomía por frío: aprox. lineal por debajo de 20°C, hasta ~25% a 0°C (guía habitual EV/ABRP).
+    var perdidaPct = temp<20 ? Math.min(25, (20-temp)*1.25) : 0;
+    var ar = autonomiaRealKm();
+    var kmAjustado = Math.round(ar.km * (1-perdidaPct/100));
+
+    var cont = document.getElementById('tarjeta-clima');
+    cont.style.display = '';
+    cont.innerHTML =
+      '<div class="lbl">'+li('termometro')+'Hoy en Gijón: '+Math.round(temp)+' °C</div>'+
+      '<div class="val">'+kmAjustado+' km<span style="font-size:14px;font-weight:600;color:var(--txt3)"> reales estimados</span></div>'+
+      '<div class="sub">'+(perdidaPct>0 ? 'Autonomía de '+ar.km+' km ajustada un '+Math.round(perdidaPct)+' % por el frío' : 'Sin pérdida relevante por temperatura hoy')+'</div>';
+    aplicarIconos();
+  }catch(e){
+    climaCargado = false; // permitir reintentar si falla
+  }
+}
+
+/* ---------- Círculo de alcance (estilo ABRP) ---------- */
+var capaAlcance = null;
+document.getElementById('btn-alcance').addEventListener('click', function(){
+  var btn = this;
+  if(capaAlcance){
+    mapaLeaflet.removeLayer(capaAlcance);
+    capaAlcance = null;
+    btn.classList.remove('on');
+    return;
+  }
+  var ar = autonomiaRealKm();
+  var margen = ar.km * 0.85; // margen de seguridad del 15%, como recomienda ABRP
+  var casa = LUGARES[0];
+  capaAlcance = L.layerGroup([
+    L.circle([casa.lat, casa.lng], { radius: margen*1000, color:'#0a84ff', weight:2, fillColor:'#0a84ff', fillOpacity:.08, dashArray:'6 6' })
+      .bindPopup('<b>Alcance con margen de seguridad</b><br>'+Math.round(margen)+' km, a tu consumo medio real ('+ar.consumo.toFixed(1)+' kWh/100km)'),
+    L.circle([casa.lat, casa.lng], { radius: ar.km*1000, color:'#2fae60', weight:1, fillColor:'#2fae60', fillOpacity:.05, dashArray:'2 6' })
+      .bindPopup('<b>Alcance teórico al 100%</b><br>'+ar.km+' km sin margen')
+  ]).addTo(mapaLeaflet);
+  btn.classList.add('on');
+  mapaLeaflet.fitBounds(capaAlcance.getLayers()[1].getBounds());
+});
+
+/* ---------- Calculadora "¿Llego?" (estilo ABRP, sin necesitar ruta real) ---------- */
+document.getElementById('llego-calcular').addEventListener('click', function(){
+  var km = parseFloat(document.getElementById('llego-km').value);
+  var cont = document.getElementById('llego-resultado');
+  if(!km || km<=0){ toast('Indica la distancia en km.', true); return; }
+
+  var hist = DATOS.bateria_historico;
+  var bateriaActual = hist[hist.length-1].capacidad_pct;
+  var nominal = DATOS.vehiculo.capacidad_nominal_kwh;
+  var capacidadKwh = nominal*bateriaActual/100;
+  var ar = autonomiaRealKm();
+  var velocidad = parseFloat(document.getElementById('llego-velocidad').value);
+  var consumoUsado = consumoAVelocidad(ar.consumo, ar.velRef, velocidad);
+  var kwhNecesario = km/100*consumoUsado;
+  var energiaUsableInicial = capacidadKwh * (bateriaActual-15)/100; // hasta el 15% de reserva
+  var pctLlegada = bateriaActual - (kwhNecesario/capacidadKwh*bateriaActual);
+  var ok = pctLlegada >= 15;
+  var numParadas = 0, minutosParada = 25;
+
+  var htmlParadas = '';
+  if(!ok){
+    var energiaFaltante = kwhNecesario - energiaUsableInicial;
+    var energiaPorParada = nominal*0.6; // recarga típica 20%→80%
+    numParadas = Math.max(1, Math.ceil(energiaFaltante/energiaPorParada));
+    htmlParadas =
+      '<div class="fila"><div class="fila-tx"><div class="t1">Paradas de carga necesarias</div><div class="t2">Recargando 20 %→80 % cada vez</div></div>'+
+      '<div class="fila-r"><div class="r1">'+numParadas+'</div></div></div>'+
+      '<div class="fila"><div class="fila-tx"><div class="t1">Tiempo añadido estimado</div><div class="t2">~'+minutosParada+' min por parada en supercargador</div></div>'+
+      '<div class="fila-r"><div class="r1">+'+(numParadas*minutosParada)+' min</div></div></div>';
+  }
+
+  cont.innerHTML =
+    '<div class="fila"><div class="fila-tx"><div class="t1">Energía necesaria</div><div class="t2">'+(velocidad?'Ajustado a '+velocidad+' km/h: ':'A tu consumo medio real: ')+consumoUsado.toFixed(1)+' kWh/100km</div></div>'+
+    '<div class="fila-r"><div class="r1">'+kwhNecesario.toFixed(1)+' kWh</div></div></div>'+
+    '<div class="fila"><div class="fila-tx"><div class="t1">Batería estimada de llegada</div><div class="t2">Partiendo del '+bateriaActual.toFixed(0)+' % actual</div></div>'+
+    '<div class="fila-r"><div class="r1" style="color:'+(ok?'var(--ok)':'var(--acc)')+'">'+Math.round(pctLlegada)+' %</div></div></div>'+
+    htmlParadas+
+    '<div class="vacio" style="padding:14px 4px 4px">'+
+    (ok ? '<p>✅ Llegas sin necesidad de cargar, con margen de seguridad.</p>' : '<p>⚠️ Llegarías por debajo del 15 % recomendado — necesitas cargar por el camino.</p>')+
+    '</div>'+
+    '<div class="form-acciones" style="padding:0 16px 16px"><button class="btn-secundario" id="llego-guardar-plan" style="flex:none;padding:10px 18px">Guardar este plan</button></div>';
+
+  document.getElementById('llego-guardar-plan').addEventListener('click', function(){
+    DATOS.planes.push({
+      id:'p'+Date.now(),
+      fecha_creacion: new Date().toISOString(),
+      destino: document.getElementById('llego-destino').value.trim() || 'Sin nombre',
+      km: km, kwh: kwhNecesario, pct_llegada: Math.round(pctLlegada), paradas: numParadas
+    });
+    guardarDatos();
+    renderPlanes();
+    toast('Plan guardado');
+  });
+});
+
+/* ---------- Planes de viaje guardados ---------- */
+function renderPlanes(){
+  var cont = document.getElementById('lista-planes');
+  if(!cont) return;
+  var planes = (DATOS.planes||[]).slice().sort(function(a,b){ return new Date(b.fecha_creacion)-new Date(a.fecha_creacion); });
+  cont.innerHTML = planes.map(function(p){
+    return '<div class="fila"><div class="fila-tx"><div class="t1">'+p.destino+'</div>'+
+      '<div class="t2">'+p.km+' km · '+p.kwh.toFixed(1)+' kWh · llegada al '+p.pct_llegada+' %'+(p.paradas?' · '+p.paradas+' parada(s)':'')+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-plan="'+p.id+'" data-icon="papelera"></div></div>';
+  }).join('') || '<div class="vacio"><span class="em">🗺️</span><p>Sin planes guardados. Calcula un trayecto en "¿Llego?" y guárdalo.</p></div>';
+  aplicarIconos();
+}
+document.getElementById('lista-planes').addEventListener('click', function(e){
+  var borrar = e.target.closest('[data-borrar-plan]');
+  if(!borrar) return;
+  confirmarAccion('Eliminar plan', 'Se borrará este plan guardado.', function(){
+    DATOS.planes = DATOS.planes.filter(function(p){ return p.id!==borrar.dataset.borrarPlan; });
+    guardarDatos(); renderPlanes();
+    toast('Plan eliminado');
+  });
+});
+
+/* ---------- Cargadores públicos reales (Open Charge Map, gratis, sin clave) ---------- */
+var capaCargadoresPublicos = null;
+var puntosCargadoresCache = null;
+var potenciaMinActiva = 0;
+
+function popupCargador(p, potenciaMax){
+  var idFav = 'ocm-'+Math.round(p.AddressInfo.Latitude*1e5)+'-'+Math.round(p.AddressInfo.Longitude*1e5);
+  var esFavorito = (DATOS.favoritos||[]).some(function(f){ return f.id===idFav; });
+  return '<b>'+(p.AddressInfo.Title||'Cargador público')+'</b><br>'+
+    (potenciaMax? potenciaMax+' kW · ' : '') + (p.AddressInfo.AddressLine1||'') +
+    '<br><button class="ver" style="margin-top:6px;display:inline-block" data-fav-ocm="'+idFav+'" '+
+    'data-fav-nombre="'+(p.AddressInfo.Title||'Cargador público').replace(/"/g,'&quot;')+'" '+
+    'data-fav-lat="'+p.AddressInfo.Latitude+'" data-fav-lng="'+p.AddressInfo.Longitude+'">'+
+    (esFavorito ? '★ En favoritos' : '☆ Guardar en favoritos')+'</button>';
+}
+
+function pintarCargadoresPublicos(){
+  if(capaCargadoresPublicos){ mapaLeaflet.removeLayer(capaCargadoresPublicos); }
+  capaCargadoresPublicos = L.layerGroup();
+  var visibles = 0;
+  puntosCargadoresCache.forEach(function(p){
+    if(!p.AddressInfo || !p.AddressInfo.Latitude) return;
+    var potenciaMax = (p.Connections||[]).reduce(function(m,c){ return Math.max(m, c.PowerKW||0); }, 0);
+    if(potenciaMax < potenciaMinActiva) return;
+    visibles++;
+    L.circleMarker([p.AddressInfo.Latitude, p.AddressInfo.Longitude], {
+      radius:6, color:'#fff', weight:1.5, fillColor:'#8e44ec', fillOpacity:.9
+    }).bindPopup(popupCargador(p, potenciaMax)).addTo(capaCargadoresPublicos);
+  });
+  capaCargadoresPublicos.addTo(mapaLeaflet);
+  document.getElementById('cargadores-estado').textContent = visibles+' de '+puntosCargadoresCache.length+' cargadores cumplen el filtro (radio de 25 km).';
+}
+
+document.getElementById('btn-cargadores-publicos').addEventListener('click', async function(){
+  var btn = this;
+  var estado = document.getElementById('cargadores-estado');
+  var filtroPot = document.getElementById('filtro-potencia');
+  if(capaCargadoresPublicos){
+    mapaLeaflet.removeLayer(capaCargadoresPublicos);
+    capaCargadoresPublicos = null;
+    puntosCargadoresCache = null;
+    btn.classList.remove('on');
+    filtroPot.style.display = 'none';
+    estado.textContent = 'Datos de Open Charge Map, comunidad abierta de cargadores.';
+    return;
+  }
+  btn.classList.add('on');
+  estado.textContent = 'Buscando cargadores cercanos…';
+  try{
+    var casa = LUGARES[0];
+    var url = 'https://api.openchargemap.io/v3/poi/?output=json&latitude='+casa.lat+'&longitude='+casa.lng+
+      '&distance=25&distanceunit=KM&maxresults=60&compact=true&verbose=false';
+    var res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    puntosCargadoresCache = await res.json();
+    filtroPot.style.display = '';
+    pintarCargadoresPublicos();
+  }catch(e){
+    btn.classList.remove('on');
+    estado.textContent = 'No se pudieron cargar los cargadores públicos ahora mismo.';
+  }
+});
+
+document.getElementById('filtro-potencia').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-potencia]');
+  if(!btn || !puntosCargadoresCache) return;
+  potenciaMinActiva = parseInt(btn.dataset.potencia);
+  document.querySelectorAll('#filtro-potencia button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  pintarCargadoresPublicos();
+});
+
+/* Guardar/quitar cargador de favoritos desde el popup del mapa */
+document.getElementById('leaflet-map').addEventListener('click', function(e){
+  var btn = e.target.closest('[data-fav-ocm]');
+  if(!btn) return;
+  if(!DATOS.favoritos) DATOS.favoritos = [];
+  var id = btn.dataset.favOcm;
+  var existe = DATOS.favoritos.some(function(f){ return f.id===id; });
+  if(existe){
+    DATOS.favoritos = DATOS.favoritos.filter(function(f){ return f.id!==id; });
+    btn.textContent = '☆ Guardar en favoritos';
+    toast('Quitado de favoritos');
+  } else {
+    DATOS.favoritos.push({ id:id, nombre:btn.dataset.favNombre, lat:parseFloat(btn.dataset.favLat), lng:parseFloat(btn.dataset.favLng) });
+    btn.textContent = '★ En favoritos';
+    toast('Guardado en favoritos');
+  }
+  guardarDatos();
+  renderLugares();
+  pintarFavoritosEnMapa();
+});
+
+/* ---------- Referencia gasolina editable ---------- */
+document.getElementById('ref-consumo').addEventListener('change', function(){
+  DATOS.referencia_gasolina.consumo_l_100km = parseFloat(this.value) || 0;
+  guardarDatos(); renderDashboard(); renderEstadisticas(); renderGastos();
+});
+document.getElementById('ref-precio').addEventListener('change', function(){
+  DATOS.referencia_gasolina.precio_litro = parseFloat(this.value) || 0;
+  guardarDatos(); renderDashboard(); renderEstadisticas(); renderGastos();
+});
+['veh-fecha-compra','veh-capacidad','veh-autonomia','veh-odometro','veh-seguro'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', function(){
+    DATOS.vehiculo.fecha_compra = document.getElementById('veh-fecha-compra').value || DATOS.vehiculo.fecha_compra;
+    DATOS.vehiculo.capacidad_nominal_kwh = parseFloat(document.getElementById('veh-capacidad').value) || DATOS.vehiculo.capacidad_nominal_kwh;
+    DATOS.vehiculo.autonomia_wltp_km = parseFloat(document.getElementById('veh-autonomia').value) || DATOS.vehiculo.autonomia_wltp_km;
+    DATOS.vehiculo.odometro_km = parseInt(document.getElementById('veh-odometro').value) || DATOS.vehiculo.odometro_km;
+    DATOS.seguro.fecha_renovacion = document.getElementById('veh-seguro').value;
+    guardarDatos();
+    renderDashboard(); renderBateria(); renderEstadisticas(); renderGastos();
+  });
+});
+
+document.getElementById('umbral-bateria').addEventListener('change', function(){
+  localStorage.setItem('mitesla-umbral-bateria', parseInt(this.value)||20);
+  renderDashboard();
+});
+
+document.getElementById('selector-tema').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-tema]');
+  if(!btn) return;
+  var tema = btn.dataset.tema;
+  localStorage.setItem('mitesla-tema', tema);
+  if(tema==='auto') document.documentElement.removeAttribute('data-tema');
+  else document.documentElement.setAttribute('data-tema', tema);
+  document.querySelectorAll('#selector-tema button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  var oscuro = tema==='oscuro' || (tema==='auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', oscuro ? '#000000' : '#f5f5f7');
+});
+
+['tarifa-valle','tarifa-llano','tarifa-punta'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', function(){
+    localStorage.setItem('mitesla-tarifa', JSON.stringify({
+      valle: parseFloat(document.getElementById('tarifa-valle').value)||0,
+      llano: parseFloat(document.getElementById('tarifa-llano').value)||0,
+      punta: parseFloat(document.getElementById('tarifa-punta').value)||0
+    }));
+  });
+});
+
+/* ---------- Sincronización con GitHub (sin backend) ---------- */
+function cargarConfigGithub(){
+  try{ return JSON.parse(localStorage.getItem('mitesla-github-config')) || {}; }
+  catch(e){ return {}; }
+}
+function guardarConfigGithub(cfg){ localStorage.setItem('mitesla-github-config', JSON.stringify(cfg)); }
+
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(m,p){ return String.fromCharCode('0x'+p); }));
+}
+function b64DecodeUnicode(b64){
+  return decodeURIComponent(atob(b64).split('').map(function(c){
+    return '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+
+function fusionarPorId(remotoArr, localArr){
+  var mapa = {};
+  (remotoArr||[]).forEach(function(x){ mapa[x.id] = x; });
+  (localArr||[]).forEach(function(x){ mapa[x.id] = x; }); // local gana en conflicto (más reciente en este dispositivo)
+  return Object.values(mapa);
+}
+function fusionarDatos(remoto, local){
+  return {
+    vehiculo: local.vehiculo || remoto.vehiculo,
+    referencia_gasolina: local.referencia_gasolina || remoto.referencia_gasolina,
+    bateria_historico: fusionarPorFecha(remoto.bateria_historico, local.bateria_historico),
+    viajes: fusionarPorId(remoto.viajes, local.viajes),
+    cargas: fusionarPorId(remoto.cargas, local.cargas),
+    gastos: fusionarPorId(remoto.gastos, local.gastos),
+    recordatorios: fusionarPorId(remoto.recordatorios, local.recordatorios),
+    neumaticos: local.neumaticos || remoto.neumaticos,
+    accesorios: fusionarPorId(remoto.accesorios, local.accesorios),
+    planes: fusionarPorId(remoto.planes, local.planes),
+    favoritos: fusionarPorId(remoto.favoritos, local.favoritos)
+  };
+}
+function fusionarPorFecha(remotoArr, localArr){
+  var mapa = {};
+  (remotoArr||[]).forEach(function(x){ mapa[x.fecha] = x; });
+  (localArr||[]).forEach(function(x){ mapa[x.fecha] = x; });
+  return Object.keys(mapa).sort().map(function(k){ return mapa[k]; });
+}
+
+function estadoSync(msg, error){
+  var el = document.getElementById('gh-estado');
+  el.textContent = msg;
+  el.style.color = error ? 'var(--acc)' : 'var(--txt3)';
+}
+
+document.getElementById('gh-guardar-config').addEventListener('click', function(){
+  var cfg = {
+    repo: document.getElementById('gh-repo').value.trim(),
+    path: document.getElementById('gh-path').value.trim() || 'datos.json',
+    token: document.getElementById('gh-token').value.trim()
+  };
+  guardarConfigGithub(cfg);
+  estadoSync('Configuración guardada en este dispositivo.');
+});
+
+document.getElementById('gh-sync').addEventListener('click', async function(){
+  var cfg = cargarConfigGithub();
+  if(!cfg.repo || !cfg.token){
+    estadoSync('Falta el repositorio o el token. Guarda la configuración primero.', true);
+    return;
+  }
+  var url = 'https://api.github.com/repos/'+cfg.repo+'/contents/'+cfg.path;
+  estadoSync('Sincronizando…');
+  try{
+    var sha = null, remoto = null;
+    var resGet = await fetch(url, { headers: { Authorization: 'token '+cfg.token, Accept:'application/vnd.github+json' } });
+    if(resGet.status === 200){
+      var json = await resGet.json();
+      sha = json.sha;
+      remoto = JSON.parse(b64DecodeUnicode(json.content.replace(/\n/g,'')));
+    } else if(resGet.status !== 404){
+      var errTxt = await resGet.text();
+      throw new Error('Error al leer ('+resGet.status+'): '+errTxt.slice(0,120));
+    }
+    var fusionado = remoto ? fusionarDatos(remoto, DATOS) : DATOS;
+    DATOS = fusionado;
+    guardarDatos();
+
+    var contenido = b64EncodeUnicode(JSON.stringify(DATOS, null, 2));
+    var body = { message: 'Sincronización desde Mi Tesla · '+new Date().toISOString(), content: contenido };
+    if(sha) body.sha = sha;
+    var resPut = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: 'token '+cfg.token, Accept:'application/vnd.github+json', 'Content-Type':'application/json' },
+      body: JSON.stringify(body)
+    });
+    if(!resPut.ok){
+      var errTxt2 = await resPut.text();
+      throw new Error('Error al guardar ('+resPut.status+'): '+errTxt2.slice(0,120));
+    }
+    renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas();
+    localStorage.setItem('mitesla-ultima-sync', new Date().toISOString());
+    estadoSync('Sincronizado correctamente · '+new Date().toLocaleTimeString('es-ES'));
+    toast('Sincronizado con GitHub');
+  }catch(e){
+    estadoSync('Fallo al sincronizar: '+e.message, true);
+  }
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js'); });
+}
+renderDashboard();
+renderCargas();
+renderViajes();
+renderBateria();
+renderGastos();
+renderEstadisticas();
+renderAjustes();
+renderLugares();
+renderPlanes();
+</script>
+</body>
+</html>
