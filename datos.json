@@ -1,1 +1,147 @@
-{}
+{
+  "vehiculo": {
+    "capacidad_nominal_kwh": 75,
+    "autonomia_wltp_km": 525,
+    "fecha_compra": "2026-01-15",
+    "odometro_km": 18240,
+    "estado": "aparcado"
+  },
+  "referencia_gasolina": {
+    "consumo_l_100km": 7,
+    "precio_litro": 1.55
+  },
+  "bateria_historico": [
+    {
+      "fecha": "2026-01-15",
+      "capacidad_pct": 100
+    },
+    {
+      "fecha": "2026-03-15",
+      "capacidad_pct": 99.4
+    },
+    {
+      "fecha": "2026-05-15",
+      "capacidad_pct": 98.6
+    },
+    {
+      "fecha": "2026-07-15",
+      "capacidad_pct": 98
+    },
+    {
+      "fecha": "2026-09-01",
+      "capacidad_pct": 97.3
+    }
+  ],
+  "viajes": [
+    {
+      "id": "v001",
+      "fecha": "2026-09-12T09:12",
+      "origen": "Gijón",
+      "destino": "Oviedo",
+      "km": 28.4,
+      "duracion_min": 31,
+      "bateria_inicial": 82,
+      "bateria_final": 76
+    },
+    {
+      "id": "v002",
+      "fecha": "2026-09-11T19:47",
+      "origen": "Oviedo",
+      "destino": "Gijón",
+      "km": 28.1,
+      "duracion_min": 29,
+      "bateria_inicial": 88,
+      "bateria_final": 82
+    },
+    {
+      "id": "v003",
+      "fecha": "2026-09-08T07:20",
+      "origen": "Casa",
+      "destino": "Aeropuerto de Asturias",
+      "km": 62.7,
+      "duracion_min": 46,
+      "bateria_inicial": 95,
+      "bateria_final": 82
+    }
+  ],
+  "cargas": [
+    {
+      "id": "c001",
+      "fecha": "2026-09-10T23:10",
+      "lugar": "Casa",
+      "tipo": "domestica",
+      "kwh": 22.4,
+      "precio_kwh": 0.16,
+      "bateria_inicial": 32,
+      "bateria_final": 80
+    },
+    {
+      "id": "c002",
+      "fecha": "2026-09-06T12:05",
+      "lugar": "Supercharger Gijón",
+      "tipo": "supercharger",
+      "kwh": 41.2,
+      "precio_kwh": 0.35,
+      "bateria_inicial": 18,
+      "bateria_final": 90
+    }
+  ],
+  "gastos": [
+    {
+      "id": "g001",
+      "fecha": "2026-03-01",
+      "categoria": "seguro",
+      "concepto": "Seguro anual",
+      "importe": 620
+    },
+    {
+      "id": "g002",
+      "fecha": "2026-07-15",
+      "categoria": "neumaticos",
+      "concepto": "4 neumáticos",
+      "importe": 780
+    }
+  ],
+  "recordatorios": [
+    {
+      "id": "r001",
+      "concepto": "Rotación / cambio de neumáticos",
+      "km_objetivo": 40000
+    },
+    {
+      "id": "r002",
+      "concepto": "ITV",
+      "km_objetivo": 60000
+    }
+  ],
+  "neumaticos": {
+    "delanteros": {
+      "fecha_instalacion": "2026-01-15",
+      "km_instalacion": 0,
+      "vida_util_km": 45000
+    },
+    "traseros": {
+      "fecha_instalacion": "2026-01-15",
+      "km_instalacion": 0,
+      "vida_util_km": 45000
+    }
+  },
+  "accesorios": [
+    {
+      "id": "a001",
+      "nombre": "Alfombrillas todo tiempo",
+      "categoria": "proteccion",
+      "fecha": "2026-01-20",
+      "precio": 89
+    },
+    {
+      "id": "a002",
+      "nombre": "Cable Type 2 portátil",
+      "categoria": "carga",
+      "fecha": "2026-02-03",
+      "precio": 145
+    }
+  ],
+  "planes": [],
+  "favoritos": []
+}
