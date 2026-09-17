@@ -1,0 +1,21 @@
+MI TESLA — CONTENIDO DEL PAQUETE
+==================================
+
+SUBIR A GITHUB (repo chollomaton/mitesla, todos sueltos en la raíz):
+  - index.html
+  - manifest.webmanifest
+  - sw.js
+  - datos.json
+  - icon-192.png
+  - icon-512.png
+  - apple-touch-icon.png
+
+USAR EN CLOUDFLARE (el backend que conecta con Tesla):
+  - worker.js            → pegar su contenido en el Worker de Cloudflare
+  - public-key.pem        → su contenido va en la variable TESLA_PUBLIC_KEY_PEM
+
+GUARDAR EN TU ORDENADOR, NO SUBIR A NINGÚN SITIO:
+  - private-key.pem       → secreto, no se comparte ni se sube a GitHub
+
+Sigue el paso a paso que te di en el chat para developer.tesla.com
+y Cloudflare — ese README es solo para que sepas dónde va cada archivo.
