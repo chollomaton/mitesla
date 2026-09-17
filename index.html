@@ -1970,10 +1970,14 @@ document.getElementById('tesla-guardar-config').addEventListener('click', functi
 });
 
 document.getElementById('tesla-conectar').addEventListener('click', function(){
-  var cfg = cargarConfigTesla();
+  var cfg = {
+    clientId: document.getElementById('tesla-client-id').value.trim(),
+    backendUrl: document.getElementById('tesla-backend-url').value.trim().replace(/\/$/,'')
+  };
+  guardarConfigTesla(cfg);
   var estado = document.getElementById('tesla-estado');
   if(!cfg.clientId || !cfg.backendUrl){
-    estado.textContent = 'Falta el Client ID o la URL del backend. Guarda la configuración primero.';
+    estado.textContent = 'Falta el Client ID o la URL del backend.';
     estado.style.color = 'var(--acc)';
     return;
   }
@@ -2516,9 +2520,14 @@ document.getElementById('gh-guardar-config').addEventListener('click', function(
 });
 
 document.getElementById('gh-sync').addEventListener('click', async function(){
-  var cfg = cargarConfigGithub();
+  var cfg = {
+    repo: document.getElementById('gh-repo').value.trim(),
+    path: document.getElementById('gh-path').value.trim() || 'datos.json',
+    token: document.getElementById('gh-token').value.trim()
+  };
+  guardarConfigGithub(cfg);
   if(!cfg.repo || !cfg.token){
-    estadoSync('Falta el repositorio o el token. Guarda la configuración primero.', true);
+    estadoSync('Falta el repositorio o el token.', true);
     return;
   }
   var url = 'https://api.github.com/repos/'+cfg.repo+'/contents/'+cfg.path;
