@@ -281,6 +281,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
     <div class="sub" id="dash-ahorro-sub">desde el registro</div>
   </div>
 
+  <div class="filtros" style="margin-bottom:16px">
+    <button id="btn-compartir-resumen">📤 Compartir resumen</button>
+  </div>
+
   <div class="sec">
     <div class="sec-h"><h2>Últimos viajes</h2><span class="ver" data-goto="viajes">Ver todos</span></div>
     <div class="lista" id="dash-viajes"></div>
@@ -702,6 +706,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
       <div class="fila">
         <div class="fila-tx"><div class="t1">Avisar si la batería baja de</div><div class="t2">Se muestra en el Dashboard</div></div>
         <div class="fila-r"><input type="number" id="umbral-bateria" style="width:60px;text-align:right" class="input-inline"> %</div>
+      </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Notificaciones del sistema</div><div class="t2" id="notif-estado">Toca para activarlas</div></div>
+        <div class="fila-r"><span class="ver" id="notif-activar">Activar</span></div>
       </div>
     </div>
   </div>
@@ -1167,6 +1175,7 @@ function renderAjustes(){
   if(ultimaSync){
     document.getElementById('gh-estado').textContent = 'Última sincronización: '+new Date(ultimaSync).toLocaleString('es-ES');
   }
+  actualizarEstadoNotificaciones();
 }
 
 function renderEstadisticas(){
@@ -1344,6 +1353,7 @@ function renderDashboard(){
   } else {
     avisoEl.style.display = 'none';
   }
+  avisarBateriaBajaSiHaceFalta(cargaActual, umbral);
 
   var TEXTOS_ESTADO = { aparcado:'Aparcado en casa', cargando:'Cargando en casa', conduciendo:'En marcha' };
   var PILL_ESTADO = { aparcado:'En reposo', cargando:'Cargando', conduciendo:'En marcha' };
@@ -2507,6 +2517,76 @@ document.getElementById('ref-precio').addEventListener('change', function(){
 document.getElementById('umbral-bateria').addEventListener('change', function(){
   localStorage.setItem('mitesla-umbral-bateria', parseInt(this.value)||20);
   renderDashboard();
+});
+
+/* ---------- Notificaciones del sistema (batería baja) ---------- */
+function actualizarEstadoNotificaciones(){
+  var el = document.getElementById('notif-estado');
+  var btn = document.getElementById('notif-activar');
+  if(!('Notification' in window)){
+    el.textContent = 'No disponibles en este navegador';
+    btn.style.display = 'none';
+    return;
+  }
+  if(Notification.permission === 'granted'){
+    el.textContent = 'Activadas';
+    btn.textContent = 'Desactivar';
+  } else if(Notification.permission === 'denied'){
+    el.textContent = 'Bloqueadas por el navegador — actívalas en los ajustes de Safari/Chrome para este sitio';
+    btn.style.display = 'none';
+  } else {
+    el.textContent = 'Toca para activarlas';
+    btn.textContent = 'Activar';
+  }
+}
+document.getElementById('notif-activar').addEventListener('click', async function(){
+  if(Notification.permission === 'granted'){
+    localStorage.setItem('mitesla-notif-desactivadas', '1');
+    actualizarEstadoNotificaciones();
+    document.getElementById('notif-estado').textContent = 'Desactivadas (puedes reactivarlas aquí)';
+    return;
+  }
+  var permiso = await Notification.requestPermission();
+  if(permiso === 'granted'){
+    localStorage.removeItem('mitesla-notif-desactivadas');
+    new Notification('Mi Tesla', { body:'Notificaciones activadas. Te avisaré aquí si la batería baja del umbral que fijes.' });
+  }
+  actualizarEstadoNotificaciones();
+});
+function avisarBateriaBajaSiHaceFalta(cargaActual, umbral){
+  if(!('Notification' in window)) return;
+  if(Notification.permission !== 'granted') return;
+  if(localStorage.getItem('mitesla-notif-desactivadas')) return;
+  if(cargaActual >= umbral) return;
+  var yaAvisadoHoy = localStorage.getItem('mitesla-notif-bateria-fecha') === new Date().toDateString();
+  if(yaAvisadoHoy) return;
+  new Notification('Batería baja 🔋', { body:'Tu Tesla está al '+cargaActual+' %, por debajo de tu aviso ('+umbral+' %).' });
+  localStorage.setItem('mitesla-notif-bateria-fecha', new Date().toDateString());
+}
+
+/* ---------- Compartir resumen ---------- */
+document.getElementById('btn-compartir-resumen').addEventListener('click', async function(){
+  var s = statsViajes();
+  var costeTesla100 = s.media/100*0.18;
+  var costeGasolina100 = DATOS.referencia_gasolina.consumo_l_100km*DATOS.referencia_gasolina.precio_litro;
+  var ahorroTotal = (costeGasolina100-costeTesla100)/100*DATOS.vehiculo.odometro_km;
+  var cargaActual = nivelCargaActual();
+  var texto = '🚗 Mi Tesla — resumen rápido\n'+
+    '🔋 Batería: '+cargaActual+' %\n'+
+    '🛣️ Odómetro: '+DATOS.vehiculo.odometro_km.toLocaleString('es-ES')+' km\n'+
+    '⚡ Consumo medio: '+s.media.toFixed(1)+' kWh/100km\n'+
+    '💶 Ahorro vs. gasolina: '+euros(ahorroTotal);
+  if(navigator.share){
+    try{ await navigator.share({ title:'Mi Tesla', text:texto }); }
+    catch(e){ /* el usuario canceló, no hacemos nada */ }
+  } else {
+    try{
+      await navigator.clipboard.writeText(texto);
+      toast('Resumen copiado al portapapeles');
+    }catch(e){
+      toast('No se pudo compartir en este navegador', true);
+    }
+  }
 });
 
 document.getElementById('chargeprice-guardar').addEventListener('click', function(){
