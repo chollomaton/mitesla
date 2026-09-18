@@ -272,6 +272,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div id="aviso-bateria-baja" style="display:none"></div>
+  <div id="aviso-mantenimiento" style="display:none"></div>
 
   <div class="grid2" id="dash-metricas"></div>
 
@@ -308,6 +309,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
     <button data-filtro="publico">Público</button>
     <button data-filtro="trabajo">Trabajo</button>
     <button data-filtro="otros">Otros</button>
+  </div>
+
+  <div class="form-grid" style="margin-bottom:14px">
+    <input type="text" id="buscar-cargas" placeholder="Buscar por lugar…">
   </div>
 
   <div class="sec">
@@ -350,6 +355,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
     <button class="on" data-filtro="todo">Todos</button>
     <button data-filtro="7dias">Últimos 7 días</button>
     <button data-filtro="mes">Este mes</button>
+  </div>
+
+  <div class="form-grid" style="margin-bottom:14px">
+    <input type="text" id="buscar-viajes" placeholder="Buscar por origen o destino…">
   </div>
 
   <div class="sec">
@@ -404,8 +413,21 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   <div class="grid2" id="resumen-bateria"></div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Evolución de la capacidad</h2></div>
+    <div class="sec-h"><h2>Evolución de la capacidad</h2><span class="ver" id="btn-add-bateria">+ Añadir lectura</span></div>
     <div class="card" id="chart-bateria" style="padding:16px 14px 8px"></div>
+
+    <div class="lista form-oculto" id="form-bateria" style="margin-top:12px">
+      <div style="padding:16px" class="form-grid">
+        <label>Fecha<input type="date" id="fb-fecha"></label>
+        <label>Capacidad estimada (%)<input type="number" step="0.1" id="fb-pct" placeholder="Ej. 96.8"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" id="fb-cancelar">Cancelar</button>
+          <button class="btn-primario" id="fb-guardar">Guardar lectura</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lista" id="lista-bateria" style="margin-top:12px"></div>
   </div>
 
 </div>
@@ -615,6 +637,11 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   <div class="sec">
     <div class="sec-h"><h2>Cargas y tiempo</h2></div>
     <div class="grid2" id="stats-cargas"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Este mes vs. el año pasado</h2></div>
+    <div class="lista" id="stats-temporada"></div>
   </div>
 
   <div class="sec">
@@ -889,6 +916,7 @@ document.getElementById('filtros-cargas').addEventListener('click', function(e){
   document.querySelectorAll('#filtros-cargas button').forEach(function(b){ b.classList.toggle('on', b===btn); });
   renderCargas();
 });
+document.getElementById('buscar-cargas').addEventListener('input', function(){ renderCargas(); });
 
 /* ---------- Filtros de periodo en Viajes ---------- */
 document.getElementById('filtros-viajes').addEventListener('click', function(e){
@@ -898,6 +926,7 @@ document.getElementById('filtros-viajes').addEventListener('click', function(e){
   document.querySelectorAll('#filtros-viajes button').forEach(function(b){ b.classList.toggle('on', b===btn); });
   renderViajes();
 });
+document.getElementById('buscar-viajes').addEventListener('input', function(){ renderViajes(); });
 
 /* ---------- Selector manual de estado (hasta tener conexión real con Tesla) ---------- */
 document.getElementById('estado-selector').addEventListener('click', function(e){
@@ -1058,8 +1087,10 @@ function renderViajes(){
   var ahora = new Date();
   var filtrados = viajes.filter(function(v){
     var d = new Date(v.fecha);
-    if(filtroViajeActivo==='7dias') return (ahora-d) <= 7*24*3600*1000;
-    if(filtroViajeActivo==='mes') return d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth();
+    if(filtroViajeActivo==='7dias' && (ahora-d) > 7*24*3600*1000) return false;
+    if(filtroViajeActivo==='mes' && !(d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth())) return false;
+    var q = normalizarTexto(document.getElementById('buscar-viajes').value);
+    if(q && normalizarTexto(v.origen+' '+v.destino).indexOf(q)===-1) return false;
     return true;
   });
 
@@ -1128,7 +1159,29 @@ function renderBateria(){
 
   aplicarIconos();
   dibujarChartBateria();
+  renderListaBateria();
 }
+function renderListaBateria(){
+  var cont = document.getElementById('lista-bateria');
+  if(!cont) return;
+  var hist = DATOS.bateria_historico.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); });
+  cont.innerHTML = hist.map(function(h){
+    return '<div class="fila"><div class="fila-tx"><div class="t1">'+h.capacidad_pct.toFixed(1)+' %</div>'+
+      '<div class="t2">'+new Date(h.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'+
+      '<div class="btn-borrar" data-borrar-bateria="'+h.fecha+'" data-icon="papelera"></div></div>';
+  }).join('') || '<div class="vacio"><span class="em">🔋</span><p>Sin lecturas todavía.</p></div>';
+  aplicarIconos();
+}
+document.getElementById('lista-bateria').addEventListener('click', function(e){
+  var borrar = e.target.closest('[data-borrar-bateria]');
+  if(!borrar) return;
+  if(DATOS.bateria_historico.length<=1){ toast('Necesitas al menos una lectura.', true); return; }
+  confirmarAccion('Eliminar lectura', 'Se borrará esta lectura de batería.', function(){
+    DATOS.bateria_historico = DATOS.bateria_historico.filter(function(h){ return h.fecha!==borrar.dataset.borrarBateria; });
+    guardarDatos(); renderBateria(); renderDashboard();
+    toast('Lectura eliminada');
+  });
+});
 
 /* ---------- Render: Estadísticas ---------- */
 /* ---------- Render: Ajustes ---------- */
@@ -1207,8 +1260,43 @@ function renderEstadisticas(){
     '<div class="card"><div class="lbl">Tiempo conduciendo</div><div class="val">'+Math.floor(s.min/60)+'h '+(s.min%60)+'min</div><div class="sub">Registrado</div></div>'+
     '<div class="card"><div class="lbl">Ahorro total</div><div class="val ok">'+euros(ahorroTotal)+'</div><div class="sub">vs. gasolina</div></div>';
 
+  renderComparadorTemporada();
   renderRecords();
   renderLogros(s, ahorroTotal, kmOdometro, co2);
+}
+
+/* ---------- Comparador de temporadas: este mes vs. el mismo mes del año pasado ---------- */
+function renderComparadorTemporada(){
+  var cont = document.getElementById('stats-temporada');
+  if(!cont) return;
+  var ahora = new Date();
+  var mesActual = ahora.getMonth(), añoActual = ahora.getFullYear();
+
+  function statsDelMes(mes, año){
+    var viajesMes = DATOS.viajes.filter(function(v){ var d=new Date(v.fecha); return d.getMonth()===mes && d.getFullYear()===año; });
+    var cargasMes = DATOS.cargas.filter(function(c){ var d=new Date(c.fecha); return d.getMonth()===mes && d.getFullYear()===año; });
+    var km = viajesMes.reduce(function(s,v){return s+v.km;},0);
+    var coste = cargasMes.reduce(function(s,c){return s+c.kwh*c.precio_kwh;},0);
+    return { km:km, coste:coste, n:viajesMes.length };
+  }
+  var esteAño = statsDelMes(mesActual, añoActual);
+  var añoPasado = statsDelMes(mesActual, añoActual-1);
+
+  if(añoPasado.n===0){
+    cont.innerHTML = '<div class="vacio"><span class="em">📅</span><p>Todavía no hay datos de '+MESES_LARGO[mesActual]+' del año pasado para comparar — se irá llenando solo con el tiempo.</p></div>';
+    return;
+  }
+  function filaComparativa(etiqueta, actual, anterior, formatear){
+    var dif = anterior ? ((actual-anterior)/anterior*100) : 0;
+    var color = dif>0 ? 'var(--acc)' : (dif<0 ? 'var(--ok)' : 'var(--txt3)');
+    var signo = dif>0 ? '+' : '';
+    return '<div class="fila"><div class="fila-tx"><div class="t1">'+etiqueta+'</div>'+
+      '<div class="t2">'+formatear(anterior)+' el año pasado</div></div>'+
+      '<div class="fila-r"><div class="r1">'+formatear(actual)+'</div><div class="r2" style="color:'+color+'">'+signo+dif.toFixed(0)+' %</div></div></div>';
+  }
+  cont.innerHTML =
+    filaComparativa('Kilómetros', esteAño.km, añoPasado.km, function(v){return v.toFixed(0)+' km';}) +
+    filaComparativa('Coste de energía', esteAño.coste, añoPasado.coste, function(v){return euros(v);});
 }
 
 /* ---------- Récords personales ---------- */
@@ -1355,6 +1443,26 @@ function renderDashboard(){
   }
   avisarBateriaBajaSiHaceFalta(cargaActual, umbral);
 
+  /* Aviso de mantenimiento más urgente (recordatorio por km o seguro por fecha) */
+  var avisoMant = document.getElementById('aviso-mantenimiento');
+  var candidatos = [];
+  (DATOS.recordatorios||[]).forEach(function(r){
+    var restante = r.km_objetivo - DATOS.vehiculo.odometro_km;
+    if(restante <= 2000) candidatos.push({ texto: r.concepto+(restante<=0 ? ' — superado hace '+Math.abs(restante).toLocaleString('es-ES')+' km' : ' — quedan '+restante.toLocaleString('es-ES')+' km'), urgencia: restante });
+  });
+  if(DATOS.seguro && DATOS.seguro.fecha_renovacion){
+    var dias = Math.ceil((new Date(DATOS.seguro.fecha_renovacion) - new Date()) / (1000*3600*24));
+    if(dias <= 30) candidatos.push({ texto:'Renovación del seguro'+(dias<=0 ? ' — venció hace '+Math.abs(dias)+' días' : ' — quedan '+dias+' días'), urgencia: dias*66 }); // 66 ≈ km/día equivalente, solo para comparar urgencias distintas
+  }
+  if(candidatos.length){
+    candidatos.sort(function(a,b){ return a.urgencia-b.urgencia; });
+    avisoMant.style.display = '';
+    avisoMant.innerHTML = '<div class="aviso-banda" style="background:rgba(232,145,42,.12);color:var(--warn)">'+li('ajustes')+candidatos[0].texto+'</div>';
+    aplicarIconos();
+  } else {
+    avisoMant.style.display = 'none';
+  }
+
   var TEXTOS_ESTADO = { aparcado:'Aparcado en casa', cargando:'Cargando en casa', conduciendo:'En marcha' };
   var PILL_ESTADO = { aparcado:'En reposo', cargando:'Cargando', conduciendo:'En marcha' };
   document.getElementById('dash-estado').textContent = TEXTOS_ESTADO[DATOS.vehiculo.estado] || TEXTOS_ESTADO.aparcado;
@@ -1407,7 +1515,12 @@ function renderCargas(){
     '<div class="card"><div class="lbl">'+li('home')+'Casa</div><div class="val">'+casaKwh.toFixed(1)+' kWh</div><div class="sub">'+euros(casaCoste)+'</div></div>'+
     '<div class="card"><div class="lbl">'+li('pin')+'Supercharger</div><div class="val">'+scKwh.toFixed(1)+' kWh</div><div class="sub">'+euros(scCoste)+'</div></div>';
 
-  var filtradas = filtroCargaActivo==='todo' ? cargas : cargas.filter(function(c){ return c.tipo===filtroCargaActivo; });
+  var filtradas = cargas.filter(function(c){
+    if(filtroCargaActivo!=='todo' && c.tipo!==filtroCargaActivo) return false;
+    var q = normalizarTexto(document.getElementById('buscar-cargas').value);
+    if(q && normalizarTexto(c.lugar).indexOf(q)===-1) return false;
+    return true;
+  });
 
   document.getElementById('lista-cargas').innerHTML = filtradas.length ? agruparPorMes(filtradas, function(c){
     var coste = c.kwh*c.precio_kwh;
@@ -1928,6 +2041,32 @@ document.querySelectorAll('[data-goto]').forEach(function(el){
 });
 
 /* ---------- Gráfico: evolución de batería (línea), leído de DATOS ---------- */
+/* ---------- Formulario: nueva lectura de salud de batería ---------- */
+var formBateria = document.getElementById('form-bateria');
+document.getElementById('btn-add-bateria').addEventListener('click', function(){
+  formBateria.classList.toggle('form-oculto');
+  if(!formBateria.classList.contains('form-oculto')){
+    document.getElementById('fb-fecha').value = new Date().toISOString().slice(0,10);
+  }
+});
+document.getElementById('fb-cancelar').addEventListener('click', function(){
+  formBateria.classList.add('form-oculto');
+});
+document.getElementById('fb-guardar').addEventListener('click', function(){
+  var fecha = document.getElementById('fb-fecha').value;
+  var pct = parseFloat(document.getElementById('fb-pct').value);
+  if(!fecha || isNaN(pct) || pct<=0 || pct>100){ toast('Indica una fecha y un % válido (0-100).', true); return; }
+  DATOS.bateria_historico = DATOS.bateria_historico.filter(function(h){ return h.fecha !== fecha; }); // sustituye si ya había una lectura ese día
+  DATOS.bateria_historico.push({ fecha: fecha, capacidad_pct: pct });
+  DATOS.bateria_historico.sort(function(a,b){ return new Date(a.fecha)-new Date(b.fecha); });
+  guardarDatos();
+  document.getElementById('fb-pct').value = '';
+  formBateria.classList.add('form-oculto');
+  renderBateria();
+  renderDashboard();
+  toast('Lectura de batería guardada');
+});
+
 function dibujarChartBateria(){
   var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   var datos = DATOS.bateria_historico.map(function(h){
