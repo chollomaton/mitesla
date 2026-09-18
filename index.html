@@ -1982,7 +1982,7 @@ document.getElementById('tesla-conectar').addEventListener('click', function(){
     return;
   }
   var redirectUri = cfg.backendUrl + '/callback';
-  var scope = 'openid vehicle_device_data vehicle_location offline_access';
+  var scope = 'openid offline_access user_data vehicle_device_data vehicle_location vehicle_charging_cmds';
   var url = 'https://auth.tesla.com/oauth2/v3/authorize'
     + '?client_id=' + encodeURIComponent(cfg.clientId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
