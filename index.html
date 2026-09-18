@@ -739,6 +739,19 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
+    <div class="sec-h"><h2>Comparador de precios (Chargeprice)</h2></div>
+    <div class="lista">
+      <div style="padding:16px" class="form-grid">
+        <label>Clave de API (opcional)<input type="password" id="chargeprice-key" placeholder="Pégala aquí cuando la tengas"></label>
+        <div class="form-acciones">
+          <button class="btn-primario" id="chargeprice-guardar" style="flex:none;padding:10px 18px">Guardar</button>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--txt3);padding:8px 4px 0">Solicítala gratis escribiendo a sales@chargeprice.net (uso personal, no comercial). En cuanto la pegues aquí, se activará el comparador de precios en Mapa.</p>
+  </div>
+
+  <div class="sec">
     <div class="sec-h"><h2>Copia de seguridad</h2></div>
     <div class="lista">
       <div class="fila">
@@ -1143,6 +1156,7 @@ function renderAjustes(){
   document.getElementById('gh-repo').value = cfg.repo || '';
   document.getElementById('gh-path').value = cfg.path || 'datos.json';
   document.getElementById('gh-token').value = cfg.token || '';
+  document.getElementById('chargeprice-key').value = localStorage.getItem('mitesla-chargeprice-key') || '';
   var tcfg = cargarConfigTesla();
   document.getElementById('tesla-client-id').value = tcfg.clientId || '';
   document.getElementById('tesla-backend-url').value = tcfg.backendUrl || '';
@@ -2327,13 +2341,68 @@ var potenciaMinActiva = 0;
 function popupCargador(p, potenciaMax){
   var idFav = 'ocm-'+Math.round(p.AddressInfo.Latitude*1e5)+'-'+Math.round(p.AddressInfo.Longitude*1e5);
   var esFavorito = (DATOS.favoritos||[]).some(function(f){ return f.id===idFav; });
+  var tieneChargeprice = !!localStorage.getItem('mitesla-chargeprice-key');
   return '<b>'+(p.AddressInfo.Title||'Cargador público')+'</b><br>'+
     (potenciaMax? potenciaMax+' kW · ' : '') + (p.AddressInfo.AddressLine1||'') +
     '<br><button class="ver" style="margin-top:6px;display:inline-block" data-fav-ocm="'+idFav+'" '+
     'data-fav-nombre="'+(p.AddressInfo.Title||'Cargador público').replace(/"/g,'&quot;')+'" '+
     'data-fav-lat="'+p.AddressInfo.Latitude+'" data-fav-lng="'+p.AddressInfo.Longitude+'">'+
-    (esFavorito ? '★ En favoritos' : '☆ Guardar en favoritos')+'</button>';
+    (esFavorito ? '★ En favoritos' : '☆ Guardar en favoritos')+'</button>'+
+    (tieneChargeprice ?
+      '<br><button class="ver" style="margin-top:4px;display:inline-block" data-comparar-precio="1" '+
+      'data-cp-lat="'+p.AddressInfo.Latitude+'" data-cp-lng="'+p.AddressInfo.Longitude+'" '+
+      'data-cp-pais="'+(p.AddressInfo.Country&&p.AddressInfo.Country.ISOCode||'ES')+'" '+
+      'data-cp-potencia="'+(potenciaMax||22)+'">💶 Comparar precio</button>'+
+      '<div id="cp-resultado-'+idFav+'" style="font-size:12px;margin-top:4px"></div>'
+    : '');
 }
+
+/* ---------- Comparador de precios de carga (Chargeprice, requiere clave propia) ---------- */
+async function compararPrecioChargeprice(lat, lng, pais, potencia, contenedorEl){
+  var key = localStorage.getItem('mitesla-chargeprice-key');
+  if(!key){ return; }
+  contenedorEl.textContent = 'Consultando precios…';
+  try{
+    var body = {
+      data: {
+        type: 'charge_price_request',
+        attributes: {
+          data_adapter: 'open_charge_map',
+          station: {
+            longitude: lng, latitude: lat, country: pais,
+            charge_points: [{ power: potencia, plug: potencia>=50 ? 'ccs' : 'type2' }]
+          },
+          options: { energy: 30, duration: 30, start_time: 720 }
+        }
+      }
+    };
+    var res = await fetch('https://api.chargeprice.net/v1/charge_prices', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'API-Key': key, 'Accept-Language':'es' },
+      body: JSON.stringify(body)
+    });
+    var json = await res.json();
+    if(!res.ok){
+      contenedorEl.textContent = 'Chargeprice: ' + (json.errors ? json.errors.map(function(e){return e.detail||e.title;}).join(', ') : 'error '+res.status);
+      return;
+    }
+    var precios = (json.data||[]).slice(0,3);
+    if(!precios.length){ contenedorEl.textContent = 'Sin tarifas encontradas para este punto.'; return; }
+    contenedorEl.innerHTML = precios.map(function(t){
+      var a = t.attributes||{};
+      return (a.tariff_name||'Tarifa')+': <b>'+(a.total!=null?a.total.toFixed(2)+' €':'—')+'</b>';
+    }).join('<br>');
+  }catch(e){
+    contenedorEl.textContent = 'No se pudo consultar Chargeprice ahora mismo.';
+  }
+}
+document.getElementById('leaflet-map').addEventListener('click', function(e){
+  var btn = e.target.closest('[data-comparar-precio]');
+  if(!btn) return;
+  var idFav = 'ocm-'+Math.round(parseFloat(btn.dataset.cpLat)*1e5)+'-'+Math.round(parseFloat(btn.dataset.cpLng)*1e5);
+  var cont = document.getElementById('cp-resultado-'+idFav);
+  if(cont) compararPrecioChargeprice(parseFloat(btn.dataset.cpLat), parseFloat(btn.dataset.cpLng), btn.dataset.cpPais, parseFloat(btn.dataset.cpPotencia), cont);
+});
 
 function pintarCargadoresPublicos(){
   if(capaCargadoresPublicos){ mapaLeaflet.removeLayer(capaCargadoresPublicos); }
@@ -2435,6 +2504,12 @@ document.getElementById('ref-precio').addEventListener('change', function(){
 document.getElementById('umbral-bateria').addEventListener('change', function(){
   localStorage.setItem('mitesla-umbral-bateria', parseInt(this.value)||20);
   renderDashboard();
+});
+
+document.getElementById('chargeprice-guardar').addEventListener('click', function(){
+  var key = document.getElementById('chargeprice-key').value.trim();
+  localStorage.setItem('mitesla-chargeprice-key', key);
+  toast(key ? 'Clave guardada. El comparador ya está activo en Mapa.' : 'Clave eliminada.');
 });
 
 document.getElementById('selector-tema').addEventListener('click', function(e){
