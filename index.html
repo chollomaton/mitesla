@@ -735,7 +735,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
       </div>
     </div>
     <p id="gh-estado" style="font-size:13px;color:var(--txt3);padding:0 4px">Sin configurar todavía.</p>
-    <p style="font-size:12px;color:var(--txt3);padding:0 4px">El token se guarda solo en este dispositivo, nunca se sube al repositorio.</p>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px">Una vez configurado, cada cambio se sincroniza solo unos segundos después — no hace falta pulsar el botón salvo que quieras forzarlo ya. El token se guarda solo en este dispositivo, nunca se sube al repositorio.</p>
   </div>
 
   <div class="sec">
@@ -979,7 +979,10 @@ function cargarDatos(){
   return JSON.parse(JSON.stringify(SEED));
 }
 var DATOS = cargarDatos();
-function guardarDatos(){ localStorage.setItem('mitesla-datos', JSON.stringify(DATOS)); }
+function guardarDatos(sinAutoSync){
+  localStorage.setItem('mitesla-datos', JSON.stringify(DATOS));
+  if(!sinAutoSync) programarAutoSync();
+}
 
 function euros(n){ return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
 function fechaCorta(iso){
@@ -2594,19 +2597,21 @@ document.getElementById('gh-guardar-config').addEventListener('click', function(
   estadoSync('Configuración guardada en este dispositivo.');
 });
 
-document.getElementById('gh-sync').addEventListener('click', async function(){
-  var cfg = {
+async function sincronizarGithub(opciones){
+  opciones = opciones || {};
+  var silencioso = !!opciones.silencioso;
+  var cfg = silencioso ? cargarConfigGithub() : {
     repo: document.getElementById('gh-repo').value.trim(),
     path: document.getElementById('gh-path').value.trim() || 'datos.json',
     token: document.getElementById('gh-token').value.trim()
   };
-  guardarConfigGithub(cfg);
+  if(!silencioso) guardarConfigGithub(cfg);
   if(!cfg.repo || !cfg.token){
-    estadoSync('Falta el repositorio o el token.', true);
+    if(!silencioso) estadoSync('Falta el repositorio o el token.', true);
     return;
   }
   var url = 'https://api.github.com/repos/'+cfg.repo+'/contents/'+cfg.path;
-  estadoSync('Sincronizando…');
+  if(!silencioso) estadoSync('Sincronizando…');
   try{
     var sha = null, remoto = null;
     var resGet = await fetch(url, { headers: { Authorization: 'token '+cfg.token, Accept:'application/vnd.github+json' } });
@@ -2620,10 +2625,10 @@ document.getElementById('gh-sync').addEventListener('click', async function(){
     }
     var fusionado = remoto ? fusionarDatos(remoto, DATOS) : DATOS;
     DATOS = fusionado;
-    guardarDatos();
+    guardarDatos(true); // true = no relanzar autosync mientras ya estamos sincronizando
 
     var contenido = b64EncodeUnicode(JSON.stringify(DATOS, null, 2));
-    var body = { message: 'Sincronización desde Mi Tesla · '+new Date().toISOString(), content: contenido };
+    var body = { message: (silencioso ? 'Sincronización automática' : 'Sincronización manual')+' desde Mi Tesla · '+new Date().toISOString(), content: contenido };
     if(sha) body.sha = sha;
     var resPut = await fetch(url, {
       method: 'PUT',
@@ -2637,10 +2642,25 @@ document.getElementById('gh-sync').addEventListener('click', async function(){
     renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas();
     localStorage.setItem('mitesla-ultima-sync', new Date().toISOString());
     estadoSync('Sincronizado correctamente · '+new Date().toLocaleTimeString('es-ES'));
-    toast('Sincronizado con GitHub');
+    if(!silencioso) toast('Sincronizado con GitHub');
   }catch(e){
     estadoSync('Fallo al sincronizar: '+e.message, true);
+    if(!silencioso) { /* el error ya se muestra en estadoSync */ }
   }
+}
+
+/* ---------- Auto-sincronización: se dispara sola unos segundos después de cualquier cambio ---------- */
+var autoSyncTimer = null;
+function programarAutoSync(){
+  var cfg = cargarConfigGithub();
+  if(!cfg.repo || !cfg.token) return; // sin configurar todavía, no hacemos nada
+  clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(function(){ sincronizarGithub({ silencioso:true }); }, 4000);
+}
+
+document.getElementById('gh-sync').addEventListener('click', function(){
+  clearTimeout(autoSyncTimer); // evita que se pisen una sincronización manual y una automática pendiente
+  sincronizarGithub({ silencioso:false });
 });
 
 if('serviceWorker' in navigator){
