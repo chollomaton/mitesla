@@ -2262,7 +2262,7 @@ function abrirFormAccesorio(a){
 }
 document.getElementById('btn-add-accesorio').addEventListener('click', function(){
   var f = document.getElementById('form-accesorio');
-  if(f.classList.contains('form-oculto')) abrirFormAccesorio(null);
+  if(f.classList.contains('form-oculto') || editandoAccesorio) abrirFormAccesorio(null);
   else f.classList.add('form-oculto');
 });
 document.getElementById('fa-cancelar').addEventListener('click', function(){
@@ -2359,7 +2359,7 @@ function abrirFormGasto(g){
 /* ---------- Formulario: nuevo/editar viaje ---------- */
 var formViaje = document.getElementById('form-viaje');
 document.getElementById('btn-add-viaje').addEventListener('click', function(){
-  if(formViaje.classList.contains('form-oculto')) abrirFormViaje(null);
+  if(formViaje.classList.contains('form-oculto') || editandoViaje) abrirFormViaje(null);
   else formViaje.classList.add('form-oculto');
 });
 document.getElementById('fv-cancelar').addEventListener('click', function(){
@@ -2454,7 +2454,7 @@ document.getElementById('lista-viajes').addEventListener('click', function(e){
 /* ---------- Formulario: nueva/editar carga ---------- */
 var formCarga = document.getElementById('form-carga');
 document.getElementById('btn-add-carga').addEventListener('click', function(){
-  if(formCarga.classList.contains('form-oculto')) abrirFormCarga(null);
+  if(formCarga.classList.contains('form-oculto') || editandoCarga) abrirFormCarga(null);
   else formCarga.classList.add('form-oculto');
 });
 document.getElementById('fc-cancelar').addEventListener('click', function(){
@@ -2543,7 +2543,7 @@ document.getElementById('lista-cargas').addEventListener('click', function(e){
 /* ---------- Formulario: nuevo/editar gasto ---------- */
 var formGasto = document.getElementById('form-gasto');
 document.getElementById('btn-add-gasto').addEventListener('click', function(){
-  if(formGasto.classList.contains('form-oculto')) abrirFormGasto(null);
+  if(formGasto.classList.contains('form-oculto') || editandoGasto) abrirFormGasto(null);
   else formGasto.classList.add('form-oculto');
 });
 document.getElementById('fg-cancelar').addEventListener('click', function(){
@@ -2607,7 +2607,7 @@ document.getElementById('lista-gastos').addEventListener('click', function(e){
 /* ---------- Formulario: nuevo recordatorio de mantenimiento ---------- */
 var formRecordatorio = document.getElementById('form-recordatorio');
 document.getElementById('btn-add-recordatorio').addEventListener('click', function(){
-  if(formRecordatorio.classList.contains('form-oculto')) abrirFormRecordatorio(null);
+  if(formRecordatorio.classList.contains('form-oculto') || editandoRecordatorio) abrirFormRecordatorio(null);
   else formRecordatorio.classList.add('form-oculto');
 });
 var editandoRecordatorio = null;
@@ -3554,10 +3554,13 @@ async function sincronizarGithub(opciones){
   var silencioso = !!opciones.silencioso;
   if(syncGithubEnCurso){ if(!silencioso) estadoSync('Ya hay una sincronización en curso…'); return; }
   syncGithubEnCurso = true;
+  var btnSync = document.getElementById('gh-sync');
+  if(btnSync){ btnSync.disabled = true; btnSync.style.opacity = '0.6'; }
   try{
     return await sincronizarGithubInterno(opciones, silencioso);
   } finally {
     syncGithubEnCurso = false;
+    if(btnSync){ btnSync.disabled = false; btnSync.style.opacity = ''; }
   }
 }
 async function sincronizarGithubInterno(opciones, silencioso){
