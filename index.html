@@ -721,6 +721,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   <div class="sec">
     <div class="sec-h"><h2>Vehículo</h2></div>
     <div class="lista">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Elegir modelo Tesla</div><div class="t2">Rellena batería y autonomía automáticamente</div></div>
+        <div class="fila-r"><select id="veh-modelo-select" class="input-inline" style="width:190px"></select></div>
+      </div>
       <div class="fila"><div class="fila-tx"><div class="t1">Modelo</div></div><div class="fila-r"><input type="text" id="veh-modelo" style="width:170px;text-align:right" class="input-inline"></div></div>
       <div class="fila">
         <div class="fila-tx"><div class="t1">Fecha de compra</div></div>
@@ -1587,6 +1591,7 @@ function precioSegunHora(fechaISO, tarifa){
 }
 
 function renderAjustes(){
+  poblarSelectorModelos();
   document.getElementById('ref-consumo').value = DATOS.referencia_gasolina.consumo_l_100km;
   document.getElementById('ref-precio').value = DATOS.referencia_gasolina.precio_litro;
   document.getElementById('veh-modelo').value = DATOS.vehiculo.modelo || 'Model Y Premium Dual Motor Long Range';
@@ -2821,6 +2826,69 @@ function dibujarChartKmMes(){
     ? '<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="overflow:visible">'+barras+'</svg>'
     : '<div class="vacio" style="padding:20px 0"><span class="em">📊</span><p>Registra viajes para ver tus kilómetros por mes.</p></div>';
 }
+
+/* ---------- Catálogo de modelos Tesla (estilo ABRP) — capacidad y autonomía WLTP aproximadas por versión ---------- */
+var TESLA_MODELOS = [
+  { grupo:'Model S', id:'mods-2012-70', label:'Model S 70 (2012–2016)', capacidad:70, autonomia:390 },
+  { grupo:'Model S', id:'mods-2012-85', label:'Model S 85 (2012–2016)', capacidad:85, autonomia:502 },
+  { grupo:'Model S', id:'mods-2016-75d', label:'Model S 75D (2016–2019)', capacidad:75, autonomia:417 },
+  { grupo:'Model S', id:'mods-2016-100d', label:'Model S 100D (2016–2019)', capacidad:100, autonomia:632 },
+  { grupo:'Model S', id:'mods-2016-p100d', label:'Model S P100D (2016–2019)', capacidad:100, autonomia:507 },
+  { grupo:'Model S', id:'mods-2021-lr', label:'Model S Long Range (2021– )', capacidad:100, autonomia:634 },
+  { grupo:'Model S', id:'mods-2021-plaid', label:'Model S Plaid (2021– )', capacidad:100, autonomia:600 },
+  { grupo:'Model X', id:'modx-2015-90d', label:'Model X 90D (2015–2016)', capacidad:90, autonomia:417 },
+  { grupo:'Model X', id:'modx-2016-75d', label:'Model X 75D (2016–2019)', capacidad:75, autonomia:381 },
+  { grupo:'Model X', id:'modx-2016-100d', label:'Model X 100D (2016–2019)', capacidad:100, autonomia:565 },
+  { grupo:'Model X', id:'modx-2021-lr', label:'Model X Long Range (2021– )', capacidad:100, autonomia:560 },
+  { grupo:'Model X', id:'modx-2021-plaid', label:'Model X Plaid (2021– )', capacidad:100, autonomia:530 },
+  { grupo:'Model 3', id:'mod3-2017-lr', label:'Model 3 Long Range (2017–2020)', capacidad:75, autonomia:560 },
+  { grupo:'Model 3', id:'mod3-2019-sr', label:'Model 3 Standard Range Plus (2019–2021)', capacidad:54, autonomia:409 },
+  { grupo:'Model 3', id:'mod3-2018-perf', label:'Model 3 Performance (2018–2020)', capacidad:75, autonomia:530 },
+  { grupo:'Model 3', id:'mod3-2021-sr', label:'Model 3 Standard Range Plus (2021)', capacidad:55, autonomia:448 },
+  { grupo:'Model 3', id:'mod3-2021-lr', label:'Model 3 Long Range (2021–2023)', capacidad:82, autonomia:614 },
+  { grupo:'Model 3', id:'mod3-2021-perf', label:'Model 3 Performance (2021–2023)', capacidad:82, autonomia:547 },
+  { grupo:'Model 3', id:'mod3-2023-rwd', label:'Model 3 "Highland" Propulsión Trasera (2023– )', capacidad:60, autonomia:513 },
+  { grupo:'Model 3', id:'mod3-2023-lr', label:'Model 3 "Highland" Long Range (2023– )', capacidad:75, autonomia:629 },
+  { grupo:'Model 3', id:'mod3-2024-perf', label:'Model 3 "Highland" Performance (2024– )', capacidad:75, autonomia:528 },
+  { grupo:'Model Y', id:'mody-2020-lr', label:'Model Y Long Range (2020–2022)', capacidad:75, autonomia:505 },
+  { grupo:'Model Y', id:'mody-2020-perf', label:'Model Y Performance (2020–2022)', capacidad:75, autonomia:480 },
+  { grupo:'Model Y', id:'mody-2022-rwd', label:'Model Y Propulsión Trasera (2022– )', capacidad:60, autonomia:455 },
+  { grupo:'Model Y', id:'mody-2022-lr', label:'Model Y Tracción Total / Long Range (2022– )', capacidad:75, autonomia:533 },
+  { grupo:'Model Y', id:'mody-2022-perf', label:'Model Y Performance (2022–2024)', capacidad:75, autonomia:514 },
+  { grupo:'Model Y', id:'mody-2025-rwd', label:'Model Y "Juniper" Propulsión Trasera (2025– )', capacidad:62.5, autonomia:534 },
+  { grupo:'Model Y', id:'mody-2025-lr', label:'Model Y "Juniper" Tracción Total / Long Range (2025– )', capacidad:75, autonomia:586 },
+  { grupo:'Model Y', id:'mody-2025-perf', label:'Model Y "Juniper" Performance (2025– )', capacidad:75, autonomia:555 },
+  { grupo:'Cybertruck', id:'cbt-2024-awd', label:'Cybertruck All-Wheel Drive (2024– )', capacidad:123, autonomia:515 },
+  { grupo:'Cybertruck', id:'cbt-2024-beast', label:'Cybertruck Cyberbeast (2024– )', capacidad:123, autonomia:463 },
+  { grupo:'Roadster', id:'rdst-2008', label:'Roadster (2008–2012)', capacidad:53, autonomia:393 }
+]; // Valores aproximados de referencia (capacidad nominal y autonomía WLTP); siempre editables a mano tras elegir.
+
+function poblarSelectorModelos(){
+  var sel = document.getElementById('veh-modelo-select');
+  if(!sel || sel.options.length) return; // ya poblado
+  var html = '<option value="">— Elegir tu modelo exacto —</option>';
+  var grupoActual = null;
+  TESLA_MODELOS.forEach(function(m){
+    if(m.grupo !== grupoActual){
+      if(grupoActual !== null) html += '</optgroup>';
+      html += '<optgroup label="'+esc(m.grupo)+'">';
+      grupoActual = m.grupo;
+    }
+    html += '<option value="'+m.id+'">'+esc(m.label)+'</option>';
+  });
+  html += '</optgroup>';
+  sel.innerHTML = html;
+}
+document.getElementById('veh-modelo-select').addEventListener('change', function(){
+  var m = TESLA_MODELOS.find(function(x){ return x.id===this.value; }, this);
+  this.value = '';
+  if(!m) return;
+  document.getElementById('veh-modelo').value = m.label;
+  document.getElementById('veh-capacidad').value = m.capacidad;
+  document.getElementById('veh-autonomia').value = m.autonomia;
+  guardarCambiosVehiculo();
+  toast('Modelo aplicado: batería '+m.capacidad+' kWh · autonomía '+m.autonomia+' km');
+});
 
 /* ---------- Conexión Tesla (OAuth) — activable cuando tengas Client ID + backend ---------- */
 var TESLA_CONFIG_POR_DEFECTO = { clientId:'3b8ae070-eec0-4768-8838-edbd897f869d', backendUrl:'https://api.laperestronika.com' }; // app "MiEV" ya registrada ante Tesla — dato público, no secreto
