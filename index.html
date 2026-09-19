@@ -18,36 +18,57 @@
   --bg:#f5f5f7; --elev:#fff; --sunk:#fbfbfd; --glass:rgba(245,245,247,.82);
   --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
   --line:rgba(0,0,0,.08); --fill:rgba(0,0,0,.045);
-  --sh1:0 1px 2px rgba(0,0,0,.06); --sh2:0 2px 10px rgba(0,0,0,.07);
+  --sh1:0 1px 2px rgba(0,0,0,.05), 0 6px 16px rgba(20,20,25,.05);
+  --sh2:0 4px 18px rgba(20,20,25,.09), 0 1px 3px rgba(0,0,0,.06);
   --acc:#e8342a; --acc2:#0a84ff; --ok:#2fae60; --warn:#e8912a;
   --radius:18px;
+  --bg-glow1:rgba(10,132,255,.06); --bg-glow2:rgba(232,52,42,.05);
 }
 @media (prefers-color-scheme:dark){
   :root{
     --bg:#000; --elev:#1c1c1e; --sunk:#141416; --glass:rgba(0,0,0,.76);
     --txt:#f5f5f7; --txt2:#98989d; --txt3:#8e8e93;
     --line:rgba(255,255,255,.09); --fill:rgba(255,255,255,.07);
-    --sh1:0 1px 2px rgba(0,0,0,.5); --sh2:0 2px 14px rgba(0,0,0,.55);
+    --sh1:0 1px 2px rgba(0,0,0,.5), 0 8px 20px rgba(0,0,0,.35);
+    --sh2:0 6px 24px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.6);
+    --bg-glow1:rgba(10,132,255,.10); --bg-glow2:rgba(232,52,42,.07);
   }
 }
 html[data-tema="claro"]{
   --bg:#f5f5f7; --elev:#fff; --sunk:#fbfbfd; --glass:rgba(245,245,247,.82);
   --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
   --line:rgba(0,0,0,.08); --fill:rgba(0,0,0,.045);
-  --sh1:0 1px 2px rgba(0,0,0,.06); --sh2:0 2px 10px rgba(0,0,0,.07);
+  --sh1:0 1px 2px rgba(0,0,0,.05), 0 6px 16px rgba(20,20,25,.05);
+  --sh2:0 4px 18px rgba(20,20,25,.09), 0 1px 3px rgba(0,0,0,.06);
+  --bg-glow1:rgba(10,132,255,.06); --bg-glow2:rgba(232,52,42,.05);
 }
 html[data-tema="oscuro"]{
   --bg:#000; --elev:#1c1c1e; --sunk:#141416; --glass:rgba(0,0,0,.76);
   --txt:#f5f5f7; --txt2:#98989d; --txt3:#8e8e93;
   --line:rgba(255,255,255,.09); --fill:rgba(255,255,255,.07);
-  --sh1:0 1px 2px rgba(0,0,0,.5); --sh2:0 2px 14px rgba(0,0,0,.55);
+  --sh1:0 1px 2px rgba(0,0,0,.5), 0 8px 20px rgba(0,0,0,.35);
+  --sh2:0 6px 24px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.6);
+  --bg-glow1:rgba(10,132,255,.10); --bg-glow2:rgba(232,52,42,.07);
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--txt);
+html{scrollbar-color:var(--txt3) transparent}
+body{margin:0;background:var(--bg) fixed;color:var(--txt);
+  background-image:
+    radial-gradient(720px 420px at 12% -6%, var(--bg-glow1), transparent 62%),
+    radial-gradient(640px 380px at 108% 8%, var(--bg-glow2), transparent 60%);
+  background-repeat:no-repeat; background-attachment:fixed;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased; padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer}
 h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+@media (hover:hover){
+  .card:hover,.lista .fila:hover,.logro:hover{box-shadow:var(--sh2)}
+  .card:hover{transform:translateY(-1px)}
+  .btn-primario:hover,.btn-secundario:hover{filter:brightness(1.05)}
+  .filtros button:hover,.nav button:hover .ic{filter:brightness(1.08)}
+}
 
 /* barra superior */
 .top{position:sticky;top:0;z-index:20;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
@@ -57,11 +78,11 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   background:#000;z-index:1}
 .marca{display:flex;align-items:center;gap:9px}
 .top h1{font-size:21px}
-.logo-badge{width:30px;height:30px;padding:6px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#3a6ea8,#0f2a4a 65%,#050d18);box-shadow:0 2px 6px rgba(10,42,74,.35)}
+.logo-badge{width:32px;height:32px;padding:6.5px;border-radius:11px;flex-shrink:0;
+  background:linear-gradient(135deg,#ff5147,var(--acc) 55%,#8f1610);box-shadow:0 3px 10px rgba(232,52,42,.35)}
 .pill{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ok);
-  background:rgba(47,174,96,.13);padding:6px 12px;border-radius:999px}
-.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  background:rgba(47,174,96,.13);padding:6px 12px;border-radius:999px;transition:background .2s ease, color .2s ease}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 5px currentColor}
 .pill.p-aparcado{color:var(--txt3);background:var(--fill)}
 .pill.p-aparcado .dot{background:var(--txt3)}
 .pill.p-cargando{color:var(--ok);background:rgba(47,174,96,.13)}
@@ -73,25 +94,31 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 .wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
 
 /* hero coche */
-.hero{background:var(--elev);border-radius:24px;box-shadow:var(--sh1);padding:22px 20px;margin-bottom:16px}
-.hero-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.hero{position:relative;overflow:hidden;background:var(--elev);border-radius:24px;box-shadow:var(--sh1);padding:22px 20px;margin-bottom:16px;
+  border:1px solid var(--line)}
+.hero::before{content:'';position:absolute;top:-60px;right:-60px;width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(47,174,96,.16),transparent 70%);pointer-events:none}
+.hero-top{position:relative;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
 .hero-top .modelo{font-size:13px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em}
 .hero-top .estado{font-size:15px;font-weight:600;color:var(--txt2);margin-top:2px}
-.bateria-num{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1}
-.bateria-num span{font-size:22px;font-weight:600;color:var(--txt3)}
-.barra{height:8px;border-radius:99px;background:var(--fill);margin:14px 0 10px;overflow:hidden}
-.barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--ok),#8fd39a)}
-.hero-foot{display:flex;justify-content:space-between;font-size:13.5px;color:var(--txt2)}
+.bateria-num{position:relative;font-size:46px;font-weight:750;letter-spacing:-.03em;line-height:1;
+  background:linear-gradient(180deg,var(--txt),var(--txt2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.bateria-num span{font-size:22px;font-weight:600;color:var(--txt3);-webkit-text-fill-color:var(--txt3)}
+.barra{position:relative;height:9px;border-radius:99px;background:var(--fill);margin:14px 0 10px;overflow:hidden;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.06)}
+.barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--ok),#8fd39a);
+  box-shadow:0 0 10px var(--barra-glow, rgba(47,174,96,.55));transition:width .5s cubic-bezier(.22,.8,.3,1)}
+.hero-foot{position:relative;display:flex;justify-content:space-between;font-size:13.5px;color:var(--txt2)}
 .hero-foot b{color:var(--txt);font-weight:600}
 
 /* grid metricas */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-.card{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);padding:16px}
+.card{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);padding:16px;border:1px solid var(--line)}
 .card .lbl{font-size:12.5px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.03em;
   display:flex;align-items:center;gap:6px;margin-bottom:8px}
 .card .lbl .ic-lbl{width:13px;height:13px;flex-shrink:0;opacity:.75}
 .card .lbl .ic-lbl svg{width:100%;height:100%;display:block}
-.card .val{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.card .val{font-size:22px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .card .sub{font-size:12.5px;color:var(--txt3);margin-top:3px}
 .card .val.ok{color:var(--ok)}
 
@@ -100,11 +127,39 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 .sec-h{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 10px}
 .sec-h h2{font-size:18px}
 .sec-h .ver{font-size:14px;color:var(--acc2);font-weight:600}
+.sec-h .sec-tit{display:flex;align-items:center;gap:10px;min-width:0}
+.sec-h .sec-tit h2{margin:0}
+.sec-ico{width:27px;height:27px;border-radius:8px;background:var(--fill);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sec-ico svg{width:14px;height:14px;display:block}
+.sec-sub{font-size:12px;color:var(--txt3);margin-top:1px;font-weight:400}
 [data-goto]{cursor:pointer}
-.lista{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);overflow:hidden}
-.fila{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+
+/* estado de sincronización, estilo tarjeta */
+.estado-sync{background:var(--elev);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--sh1);overflow:hidden;margin-bottom:10px}
+.estado-sync .ehd{display:flex;align-items:center;gap:12px;padding:14px 16px}
+.epunto{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--txt3);transition:background .3s}
+.epunto.ok{background:var(--ok);box-shadow:0 0 0 4px rgba(47,174,96,.18)}
+.epunto.pend{background:var(--warn);box-shadow:0 0 0 4px rgba(232,145,42,.18)}
+.epunto.err{background:var(--acc);box-shadow:0 0 0 4px rgba(232,52,42,.18)}
+.epunto.busy{background:var(--acc2);box-shadow:0 0 0 4px rgba(10,132,255,.18);animation:pulso-punto 1s infinite}
+.epunto.off{background:var(--txt3)}
+@keyframes pulso-punto{0%,100%{opacity:1}50%{opacity:.35}}
+.estado-sync .etxt{flex:1;min-width:0}
+.estado-sync .et{font-size:14.5px;font-weight:600}
+
+/* zona delicada, plegable */
+.zona-peligro{background:var(--sunk);border-radius:var(--radius);box-shadow:0 0 0 1px var(--line);overflow:hidden;margin-top:6px}
+.zona-peligro>summary{list-style:none;cursor:pointer;padding:14px 16px;font-size:14.5px;font-weight:600;color:var(--acc);display:flex;justify-content:space-between;align-items:center}
+.zona-peligro>summary::-webkit-details-marker{display:none}
+.zona-peligro[open]>summary{border-bottom:1px solid var(--line)}
+.zona-peligro .chev{width:13px;height:13px;transition:transform .2s ease;flex-shrink:0;color:var(--txt3)}
+.zona-peligro[open] .chev{transform:rotate(180deg)}
+
+.pie-version{text-align:center;font-size:11.5px;color:var(--txt3);margin-top:22px;padding-bottom:4px}
+.lista{background:var(--elev);border-radius:var(--radius);box-shadow:var(--sh1);overflow:hidden;border:1px solid var(--line)}
+.fila{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);transition:background .15s ease}
 .fila:last-child{border-bottom:none}
-.ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;
   flex-shrink:0}
 .ico svg{width:19px;height:19px}
 .ico.viaje{background:rgba(10,132,255,.12);color:var(--acc2)}
@@ -123,11 +178,14 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 .btn-borrar:active,.btn-duplicar:active{background:var(--fill)}
 
 /* ahorro destacado */
-.ahorro{background:linear-gradient(135deg,#0a84ff,#5ac8fa);border-radius:var(--radius);padding:20px;
+.ahorro{position:relative;overflow:hidden;background:linear-gradient(135deg,#0a84ff,#3a6ea8 55%,#0f2a4a);
+  border-radius:var(--radius);padding:20px;
   color:#fff;margin-bottom:16px;box-shadow:var(--sh2)}
-.ahorro .lbl{font-size:13px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
-.ahorro .val{font-size:32px;font-weight:750;letter-spacing:-.02em}
-.ahorro .sub{font-size:13px;opacity:.9;margin-top:4px}
+.ahorro::after{content:'';position:absolute;top:-40px;right:-30px;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%);pointer-events:none}
+.ahorro .lbl{position:relative;font-size:13px;font-weight:600;opacity:.88;text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
+.ahorro .val{position:relative;font-size:33px;font-weight:750;letter-spacing:-.02em}
+.ahorro .sub{position:relative;font-size:13px;opacity:.92;margin-top:4px}
 
 /* aviso placeholder */
 .aviso{text-align:center;padding:60px 20px;color:var(--txt3)}
@@ -142,20 +200,23 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:inherit}
 .form-acciones{display:flex;gap:10px;margin-top:4px}
 .btn-primario,.btn-secundario{flex:1;padding:12px;border-radius:12px;font-size:14.5px;font-weight:650;text-align:center}
-.btn-primario{background:var(--acc2);color:#fff}
+.btn-primario{background:linear-gradient(135deg,#2a9bff,var(--acc2));color:#fff;box-shadow:0 3px 10px rgba(10,132,255,.32)}
 .btn-secundario{background:var(--fill);color:var(--txt2)}
 .input-inline{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:6px 8px;
   font-size:16px;font-weight:600;color:var(--txt);font-family:inherit}
+.form-grid input:focus,.form-grid select:focus,.input-inline:focus{outline:none;border-color:var(--acc2);
+  box-shadow:0 0 0 3px rgba(10,132,255,.15)}
 
 /* feedback táctil */
-.card,.lista .fila,.nav button,.btn-primario,.btn-secundario,.ver,.btn-borrar{transition:transform .12s ease, opacity .12s ease, background .15s ease}
+.card,.lista .fila,.nav button,.btn-primario,.btn-secundario,.ver,.btn-borrar,.btn-duplicar,.logro,.filtros button{
+  transition:transform .15s cubic-bezier(.34,1.4,.64,1), opacity .12s ease, background .15s ease, box-shadow .2s ease}
 .card:active{transform:scale(.97)}
 .lista .fila:active{background:var(--fill)}
 .btn-primario:active,.btn-secundario:active{transform:scale(.96)}
 
 /* transición entre vistas */
-.wrap, .aviso{animation:entrada .28s ease}
-@keyframes entrada{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+.wrap, .aviso{animation:entrada .32s cubic-bezier(.22,.8,.3,1)}
+@keyframes entrada{ from{opacity:0; transform:translateY(10px) scale(.99)} to{opacity:1; transform:translateY(0) scale(1)} }
 
 /* estado vacío dentro de listas */
 .vacio{text-align:center;padding:32px 16px;color:var(--txt3)}
@@ -167,7 +228,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 .filtros::-webkit-scrollbar{display:none}
 .filtros button{flex-shrink:0;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;
   background:var(--elev);color:var(--txt2);box-shadow:var(--sh1)}
-.filtros button.on{background:var(--acc2);color:#fff}
+.filtros button.on{background:var(--acc2);color:#fff;box-shadow:0 2px 8px rgba(10,132,255,.35)}
 
 /* cabecera de grupo por mes dentro de una lista */
 .grupo-mes{padding:14px 16px;font-size:12.5px;font-weight:700;color:var(--txt3);
@@ -179,37 +240,42 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 
 /* logros / insignias */
 .logros{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.logro{background:var(--elev);border-radius:16px;box-shadow:var(--sh1);padding:14px 8px;text-align:center;opacity:.35}
-.logro.on{opacity:1}
+.logro{background:var(--elev);border-radius:16px;box-shadow:var(--sh1);padding:14px 8px;text-align:center;
+  opacity:.4;filter:grayscale(.4);transition:opacity .2s ease, filter .2s ease, transform .15s cubic-bezier(.34,1.4,.64,1)}
+.logro.on{opacity:1;filter:none;background:linear-gradient(155deg,var(--elev),var(--sunk))}
 .logro .em{font-size:26px;display:block;margin-bottom:6px}
 .logro .nombre{font-size:11.5px;font-weight:700;line-height:1.2}
 .logro .desc{font-size:10px;color:var(--txt3);margin-top:2px;line-height:1.25}
 
 /* aviso de batería baja */
 .aviso-banda{display:flex;align-items:center;gap:10px;background:rgba(232,52,42,.1);color:var(--acc);
-  border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;font-weight:600}
+  border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;font-weight:600;
+  border:1px solid rgba(232,52,42,.18)}
 .aviso-banda .ic-lbl{width:18px;height:18px;opacity:1}
 
 /* selector de estado (dashboard) */
 .estado-selector{display:flex;gap:6px;margin-top:10px}
 .estado-selector button{flex:1;padding:8px 4px;border-radius:10px;font-size:11.5px;font-weight:650;
-  background:var(--fill);color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.estado-selector button.on{background:var(--acc2);color:#fff}
+  background:var(--fill);color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:background .18s ease, color .18s ease, transform .15s cubic-bezier(.34,1.4,.64,1)}
+.estado-selector button.on{background:var(--acc2);color:#fff;box-shadow:0 2px 8px rgba(10,132,255,.35)}
 
 /* toast propio */
-#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(10px);
-  background:var(--elev);color:var(--txt);padding:12px 18px;border-radius:14px;box-shadow:var(--sh2);
-  font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .22s ease, transform .22s ease;
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(10px) scale(.96);
+  background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:var(--txt);padding:12px 18px;border-radius:14px;box-shadow:var(--sh2);
+  border:1px solid var(--line);
+  font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .25s cubic-bezier(.22,.8,.3,1), transform .25s cubic-bezier(.22,.8,.3,1);
   display:flex;align-items:center;gap:8px;max-width:86%;text-align:center}
-#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
-#toast .punto{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
-#toast.error .punto{background:var(--acc)}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+#toast .punto{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0;box-shadow:0 0 6px rgba(47,174,96,.7)}
+#toast.error .punto{background:var(--acc);box-shadow:0 0 6px rgba(232,52,42,.7)}
 
 /* modal de confirmación propio */
-#modal-fondo{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:70;display:none;align-items:flex-end;justify-content:center}
+#modal-fondo{position:fixed;inset:0;background:rgba(0,0,0,.44);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  z-index:70;display:none;align-items:flex-end;justify-content:center}
 #modal-fondo.on{display:flex}
-#modal-caja{background:var(--elev);border-radius:20px 20px 0 0;padding:22px 20px calc(20px + env(safe-area-inset-bottom));
-  width:100%;max-width:520px;box-shadow:var(--sh2);animation:subir .22s ease}
+#modal-caja{background:var(--elev);border-radius:22px 22px 0 0;padding:22px 20px calc(20px + env(safe-area-inset-bottom));
+  width:100%;max-width:520px;box-shadow:var(--sh2);border-top:1px solid var(--line);animation:subir .28s cubic-bezier(.22,.8,.3,1)}
 @keyframes subir{ from{transform:translateY(100%)} to{transform:translateY(0)} }
 #modal-caja h3{font-size:17px;margin-bottom:6px}
 #modal-caja p{font-size:14px;color:var(--txt2);margin:0 0 18px}
@@ -220,11 +286,11 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   display:flex;padding:8px 4px calc(6px + env(safe-area-inset-bottom))}
 .nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 1px;
   font-size:9.5px;font-weight:600;color:var(--txt3)}
-.nav button .ic{width:30px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;
-  transition:background .18s ease}
+.nav button .ic{width:32px;height:24px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  transition:background .2s ease, transform .18s cubic-bezier(.34,1.4,.64,1)}
 .nav button .ic svg{width:19px;height:19px;display:block;transition:transform .12s ease}
 .nav button.on{color:var(--acc2)}
-.nav button.on .ic{background:rgba(10,132,255,.14)}
+.nav button.on .ic{background:rgba(10,132,255,.14);transform:translateY(-1px)}
 .nav button.on .ic svg{stroke:var(--acc2)}
 .nav button:active .ic svg{transform:scale(.88)}
 
@@ -423,7 +489,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
       </div>
     </div>
     <div class="bateria-num" id="bat-pct">97,3<span>%</span></div>
-    <div class="barra"><i id="bat-barra" style="width:97.3%;background:linear-gradient(90deg,var(--acc2),#7dc8ff)"></i></div>
+    <div class="barra"><i id="bat-barra" style="width:97.3%;background:linear-gradient(90deg,var(--acc2),#7dc8ff);--barra-glow:rgba(10,132,255,.5)"></i></div>
     <div class="hero-foot">
       <span>Nominal: <b id="bat-nominal">75 kWh</b></span>
       <span>Estimada: <b id="bat-estimada">73,0 kWh</b></span>
@@ -719,7 +785,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 <div class="wrap" id="vista-ajustes" style="display:none">
 
   <div class="sec">
-    <div class="sec-h"><h2>Vehículo</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="coche"></span><div><h2>Vehículo</h2><div class="sec-sub">Datos del coche, seguro e ITV</div></div></div></div>
     <div class="lista">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Elegir modelo Tesla</div><div class="t2">Rellena batería y autonomía automáticamente</div></div>
@@ -746,11 +812,15 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
         <div class="fila-tx"><div class="t1">Renovación del seguro</div></div>
         <div class="fila-r"><input type="date" id="veh-seguro" class="input-inline"></div>
       </div>
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Próxima ITV</div></div>
+        <div class="fila-r"><input type="date" id="veh-itv" class="input-inline"></div>
+      </div>
     </div>
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Referencia gasolina</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="gota"></span><div><h2>Referencia gasolina</h2><div class="sec-sub">Para comparar el ahorro frente a un coche de combustión</div></div></div></div>
     <div class="lista">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Consumo (l/100km)</div></div>
@@ -764,7 +834,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Tarifa eléctrica por horas</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="reloj"></span><div><h2>Tarifa eléctrica por horas</h2><div class="sec-sub">Precio sugerido al registrar una carga en casa</div></div></div></div>
     <div class="lista">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Valle</div><div class="t2">00-08h y fines de semana</div></div>
@@ -783,7 +853,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Apariencia</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="tema"></span><div><h2>Apariencia</h2><div class="sec-sub">Automático sigue lo que tengas puesto en el sistema</div></div></div></div>
     <div class="filtros" id="selector-tema" style="margin:0">
       <button data-tema="auto" class="on">Automático</button>
       <button data-tema="claro">Claro</button>
@@ -792,7 +862,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Avisos</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="campana"></span><div><h2>Avisos</h2><div class="sec-sub">Qué te avisa la app y cuándo</div></div></div></div>
     <div class="lista">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Avisar si la batería baja de</div><div class="t2">Se muestra en el Dashboard</div></div>
@@ -806,7 +876,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Conexión con Tesla</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="rayo"></span><div><h2>Conexión con Tesla</h2><div class="sec-sub">Lectura en vivo del coche vía la Fleet API oficial</div></div></div></div>
     <div class="lista" style="margin-bottom:10px">
       <div style="padding:16px" class="form-grid">
         <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" autocomplete="off" data-lpignore="true" placeholder="Pendiente de tu cuenta de desarrollador"></label>
@@ -821,7 +891,8 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Sincronización con GitHub</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="nube"></span><div><h2>Sincronización con GitHub</h2><div class="sec-sub">Así comparten datos tus dispositivos</div></div></div></div>
+    <div class="estado-sync"><div class="ehd"><span class="epunto off" id="gh-estado-dot"></span><div class="etxt"><div class="et" id="gh-estado">Sin configurar todavía.</div></div></div></div>
     <div class="lista" style="margin-bottom:10px">
       <div style="padding:16px" class="form-grid">
         <label>Repositorio (usuario/repo)<input type="text" id="gh-repo" autocomplete="off" data-lpignore="true" placeholder="tuusuario/mitesla-datos"></label>
@@ -833,12 +904,11 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
         </div>
       </div>
     </div>
-    <p id="gh-estado" style="font-size:13px;color:var(--txt3);padding:0 4px">Sin configurar todavía.</p>
     <p style="font-size:12px;color:var(--txt3);padding:0 4px">Una vez configurado, cada cambio se sincroniza solo unos segundos después — no hace falta pulsar el botón salvo que quieras forzarlo ya. El token se guarda solo en este dispositivo, nunca se sube al repositorio.</p>
   </div>
 
   <div class="sec">
-    <div class="sec-h"><h2>Copia de seguridad</h2></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="descarga"></span><div><h2>Copia de seguridad</h2><div class="sec-sub">Exportar, importar y informes</div></div></div></div>
     <div class="lista">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Exportar datos (.json)</div><div class="t2">Copia completa, para restaurar en Mi Tesla</div></div>
@@ -868,12 +938,20 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
         <div class="fila-tx"><div class="t1">Importar datos</div><div class="t2">Reemplaza los datos actuales de este dispositivo</div></div>
         <div class="fila-r"><label class="ver" style="cursor:pointer">Elegir archivo<input type="file" id="input-importar" accept="application/json" style="display:none"></label></div>
       </div>
+    </div>
+  </div>
+
+  <details class="zona-peligro">
+    <summary>Zona delicada<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></summary>
+    <div class="lista" style="box-shadow:none;border:none;border-radius:0">
       <div class="fila">
         <div class="fila-tx"><div class="t1">Empezar de cero</div><div class="t2">Borra los datos de ejemplo cuando llegue tu coche real</div></div>
         <div class="fila-r"><span class="ver" id="btn-empezar-cero" style="color:var(--acc)">Borrar</span></div>
       </div>
     </div>
-  </div>
+  </details>
+
+  <div class="pie-version" id="ajustes-pie"></div>
 
 </div>
 
@@ -1285,6 +1363,9 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
   fondo.addEventListener('click', clicFuera);
 }
 
+/* ---------- Versión de la app instalada (para saber si está al día) ---------- */
+var APP_VERSION = '2026.09.19-r2';
+
 /* ---------- Modelo de datos (semilla + localStorage) ---------- */
 var SEED = {
   vehiculo: { modelo:'Model Y Premium Dual Motor Long Range', capacidad_nominal_kwh: 75, autonomia_wltp_km: 525, fecha_compra: '2026-01-15', odometro_km: 18240, estado: 'aparcado' },
@@ -1311,7 +1392,7 @@ var SEED = {
   ],
   recordatorios: [
     { id:'r001', concepto:'Rotación / cambio de neumáticos', km_objetivo:40000 },
-    { id:'r002', concepto:'ITV', km_objetivo:60000 }
+    { id:'r002', concepto:'Revisión de frenos', km_objetivo:60000 }
   ],
   neumaticos: {
     delanteros: { fecha_instalacion:'2026-01-15', km_instalacion:0, vida_util_km:45000 },
@@ -1322,6 +1403,7 @@ var SEED = {
     { id:'a002', nombre:'Cable Type 2 portátil', categoria:'carga', fecha:'2026-02-03', precio:145 }
   ],
   seguro: { fecha_renovacion: '2027-03-01' },
+  itv: { fecha: '2027-06-10' },
   planes: [],
   favoritos: []
 };
@@ -1331,6 +1413,7 @@ function normalizarDatos(d){
   if(!d.neumaticos) d.neumaticos = JSON.parse(JSON.stringify(SEED.neumaticos));
   if(!d.accesorios) d.accesorios = [];
   if(!d.seguro) d.seguro = { fecha_renovacion: '' };
+  if(!d.itv) d.itv = { fecha: '' };
   if(!d.planes) d.planes = [];
   if(!d.favoritos) d.favoritos = [];
   if(!d.bateria_historico || !d.bateria_historico.length) d.bateria_historico = JSON.parse(JSON.stringify(SEED.bateria_historico));
@@ -1339,7 +1422,23 @@ function normalizarDatos(d){
   if(!d.gastos) d.gastos = [];
   if(!d.viajes) d.viajes = [];
   if(!d.cargas) d.cargas = [];
+  if(!d._borrados) d._borrados = {};
+  ['viajes','cargas','gastos','recordatorios','accesorios','planes','favoritos'].forEach(function(col){
+    if(!d._borrados[col]) d._borrados[col] = {};
+  });
   return d;
+}
+/* Registro de "tumbas" (ids borrados) para que una eliminación en un dispositivo no resucite
+   el elemento al fusionar con otro dispositivo que todavía lo tenga en su copia local. */
+function marcarBorrado(coleccion, id){
+  if(!DATOS._borrados) DATOS._borrados = {};
+  if(!DATOS._borrados[coleccion]) DATOS._borrados[coleccion] = {};
+  DATOS._borrados[coleccion][id] = Date.now();
+}
+// Necesario cuando se vuelve a crear un elemento con un id que ya se había borrado antes (p. ej. un
+// cargador favorito con id determinista), para que la fusión no lo vuelva a eliminar por error.
+function desmarcarBorrado(coleccion, id){
+  if(DATOS._borrados && DATOS._borrados[coleccion]) delete DATOS._borrados[coleccion][id];
 }
 function cargarDatos(){
   try{
@@ -1600,6 +1699,7 @@ function renderAjustes(){
   document.getElementById('veh-autonomia').value = DATOS.vehiculo.autonomia_wltp_km;
   document.getElementById('veh-odometro').value = DATOS.vehiculo.odometro_km;
   document.getElementById('veh-seguro').value = DATOS.seguro.fecha_renovacion;
+  document.getElementById('veh-itv').value = DATOS.itv.fecha;
   document.getElementById('umbral-bateria').value = localStorage.getItem('mitesla-umbral-bateria') || 20;
   var temaActual = localStorage.getItem('mitesla-tema') || 'auto';
   document.querySelectorAll('#selector-tema button').forEach(function(b){
@@ -1618,13 +1718,16 @@ function renderAjustes(){
   document.getElementById('tesla-backend-url').value = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
   var ultimaSync = localStorage.getItem('mitesla-ultima-sync');
   if(ultimaSync){
-    document.getElementById('gh-estado').textContent = 'Última sincronización: '+new Date(ultimaSync).toLocaleString('es-ES');
+    estadoSync('Última sincronización: '+new Date(ultimaSync).toLocaleString('es-ES'), false, 'ok');
   } else if(cfg.repo && cfg.token){
-    document.getElementById('gh-estado').textContent = 'Configurado — todavía sin sincronizar.';
+    estadoSync('Configurado — todavía sin sincronizar.', false, 'pend');
   } else {
-    document.getElementById('gh-estado').textContent = 'Sin configurar todavía.';
+    estadoSync('Sin configurar todavía.', false, 'off');
   }
   actualizarEstadoNotificaciones();
+  var instalada = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+  var pie = document.getElementById('ajustes-pie');
+  if(pie) pie.textContent = 'Mi Tesla · versión '+APP_VERSION+(instalada ? ' · instalada' : ' · abierta en el navegador');
 }
 
 function renderEstadisticas(){
@@ -1695,7 +1798,7 @@ function renderPorConductor(){
   cont.innerHTML = nombres.map(function(nombre){
     var d = porConductor[nombre];
     var coste = d.kwh*precioMedioCarga;
-    return '<div class="fila"><div class="fila-tx"><div class="t1">'+nombre+'</div><div class="t2">'+d.n+' viaje'+(d.n===1?'':'s')+' · '+d.kwh.toFixed(1)+' kWh estimados</div></div>'+
+    return '<div class="fila"><div class="fila-tx"><div class="t1">'+esc(nombre)+'</div><div class="t2">'+d.n+' viaje'+(d.n===1?'':'s')+' · '+d.kwh.toFixed(1)+' kWh estimados</div></div>'+
       '<div class="fila-r"><div class="r1">'+d.km.toFixed(0)+' km</div><div class="r2">~'+euros(coste)+'</div></div></div>';
   }).join('');
 }
@@ -1888,6 +1991,10 @@ function renderDashboard(){
   if(DATOS.seguro && DATOS.seguro.fecha_renovacion){
     var dias = diasHasta(DATOS.seguro.fecha_renovacion);
     if(dias <= 30) candidatos.push({ texto:'Renovación del seguro'+(dias<=0 ? ' — venció hace '+Math.abs(dias)+' días' : ' — quedan '+dias+' días'), urgencia: dias*66, tab:'economia' }); // 66 ≈ km/día equivalente, solo para comparar urgencias distintas
+  }
+  if(DATOS.itv && DATOS.itv.fecha){
+    var diasItv = diasHasta(DATOS.itv.fecha);
+    if(diasItv <= 60) candidatos.push({ texto:'ITV'+(diasItv<=0 ? ' — caducada hace '+Math.abs(diasItv)+' días' : ' — quedan '+diasItv+' días'), urgencia: diasItv*66, tab:'economia' });
   }
   if(DATOS.neumaticos){
     ['delanteros','traseros'].forEach(function(eje){
@@ -2180,7 +2287,19 @@ function renderRecordatorios(){
       '<div class="fila-r"><div class="r1" style="color:'+colorSeguro+'">'+textoSeguro+'</div></div></div>';
   }
 
-  cont.innerHTML = filaSeguro + lista.map(function(r){
+  var filaItv = '';
+  if(!q && DATOS.itv && DATOS.itv.fecha){
+    var diasItv = diasHasta(DATOS.itv.fecha);
+    var vencidaItv = diasItv <= 0;
+    var cercaItv = !vencidaItv && diasItv <= 60;
+    var colorItv = vencidaItv ? 'var(--acc)' : (cercaItv ? 'var(--warn)' : 'var(--txt3)');
+    var textoItv = vencidaItv ? 'Caducada hace '+Math.abs(diasItv)+' días' : 'Quedan '+diasItv+' días';
+    filaItv = '<div class="fila"><div class="fila-tx"><div class="t1">Próxima ITV</div>'+
+      '<div class="t2">'+new Date(DATOS.itv.fecha+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'+
+      '<div class="fila-r"><div class="r1" style="color:'+colorItv+'">'+textoItv+'</div></div></div>';
+  }
+
+  cont.innerHTML = filaSeguro + filaItv + lista.map(function(r){
     var restante = r.km_objetivo - kmActual;
     var vencido = restante <= 0;
     var cerca = !vencido && restante <= 2000;
@@ -2191,7 +2310,7 @@ function renderRecordatorios(){
       '<div class="fila-r"><div class="r1" style="color:'+color+'">'+texto+'</div></div>'+
       '<div class="btn-borrar" data-borrar-recordatorio="'+r.id+'" data-icon="papelera"></div>'+
       '</div>';
-  }).join('') || (filaSeguro ? '' : '<div class="vacio"><span class="em">🔧</span><p>'+(q ? 'Sin recordatorios que coincidan con la búsqueda.' : 'Sin recordatorios. Añade uno con "+ Añadir".')+'</p></div>');
+  }).join('') || ((filaSeguro || filaItv) ? '' : '<div class="vacio"><span class="em">🔧</span><p>'+(q ? 'Sin recordatorios que coincidan con la búsqueda.' : 'Sin recordatorios. Añade uno con "+ Añadir".')+'</p></div>');
   aplicarIconos();
 }
 
@@ -2209,11 +2328,12 @@ function renderNeumaticos(){
     var recorridos = Math.max(0, kmActual - n.km_instalacion);
     var pctUso = Math.min(100, Math.round(recorridos/n.vida_util_km*100));
     var color = pctUso>=90 ? 'var(--acc)' : (pctUso>=70 ? 'var(--warn)' : 'var(--ok)');
+    var glow = pctUso>=90 ? 'rgba(232,52,42,.5)' : (pctUso>=70 ? 'rgba(232,145,42,.5)' : 'rgba(47,174,96,.5)');
     return '<div class="card" data-editar-neumatico="'+e.clave+'" style="cursor:pointer">'+
       '<div class="lbl">'+e.nombre+'</div>'+
       '<div class="val">'+recorridos.toLocaleString('es-ES')+' km</div>'+
       '<div class="sub">Desde '+new Date(n.fecha_instalacion+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})+'</div>'+
-      '<div class="barra" style="margin:10px 0 2px"><i style="width:'+pctUso+'%;background:'+color+'"></i></div>'+
+      '<div class="barra" style="margin:10px 0 2px"><i style="width:'+pctUso+'%;background:'+color+';--barra-glow:'+glow+'"></i></div>'+
       '<div class="sub">'+pctUso+' % de su vida útil estimada</div>'+
       '</div>';
   }).join('');
@@ -2297,6 +2417,7 @@ document.getElementById('lista-accesorios').addEventListener('click', function(e
   var borrar = e.target.closest('[data-borrar-accesorio]');
   if(borrar){
     confirmarAccion('Eliminar accesorio', 'Se borrará este accesorio del inventario.', function(){
+      marcarBorrado('accesorios', borrar.dataset.borrarAccesorio);
       DATOS.accesorios = DATOS.accesorios.filter(function(a){ return a.id!==borrar.dataset.borrarAccesorio; });
       guardarDatos(); renderAccesorios();
       toast('Accesorio eliminado');
@@ -2432,6 +2553,7 @@ document.getElementById('lista-viajes').addEventListener('click', function(e){
   var borrar = e.target.closest('[data-borrar-viaje]');
   if(borrar){
     confirmarAccion('Eliminar viaje', 'Se borrará este viaje del historial.', function(){
+      marcarBorrado('viajes', borrar.dataset.borrarViaje);
       DATOS.viajes = DATOS.viajes.filter(function(v){ return v.id!==borrar.dataset.borrarViaje; });
       guardarDatos(); renderViajes(); renderDashboard(); renderEstadisticas();
       toast('Viaje eliminado');
@@ -2521,6 +2643,7 @@ document.getElementById('lista-cargas').addEventListener('click', function(e){
   var borrar = e.target.closest('[data-borrar-carga]');
   if(borrar){
     confirmarAccion('Eliminar carga', 'Se borrará esta carga del historial.', function(){
+      marcarBorrado('cargas', borrar.dataset.borrarCarga);
       DATOS.cargas = DATOS.cargas.filter(function(c){ return c.id!==borrar.dataset.borrarCarga; });
       guardarDatos(); renderCargas(); renderDashboard(); renderBateria(); renderGastos(); renderEstadisticas();
       toast('Carga eliminada');
@@ -2585,6 +2708,7 @@ document.getElementById('lista-gastos').addEventListener('click', function(e){
   var borrar = e.target.closest('[data-borrar-gasto]');
   if(borrar){
     confirmarAccion('Eliminar gasto', 'Se borrará este gasto del registro.', function(){
+      marcarBorrado('gastos', borrar.dataset.borrarGasto);
       DATOS.gastos = DATOS.gastos.filter(function(g){ return g.id!==borrar.dataset.borrarGasto; });
       guardarDatos(); renderGastos(); renderDashboard();
       toast('Gasto eliminado');
@@ -2653,6 +2777,7 @@ document.getElementById('lista-recordatorios').addEventListener('click', functio
   var borrar = e.target.closest('[data-borrar-recordatorio]');
   if(borrar){
     confirmarAccion('Eliminar recordatorio', 'Se borrará este recordatorio.', function(){
+      marcarBorrado('recordatorios', borrar.dataset.borrarRecordatorio);
       DATOS.recordatorios = DATOS.recordatorios.filter(function(r){ return r.id!==borrar.dataset.borrarRecordatorio; });
       guardarDatos(); renderRecordatorios();
       toast('Recordatorio eliminado');
@@ -2678,7 +2803,14 @@ var ICONOS = {
   papelera: '<path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/>',
   estrella: '<path d="M12 3.5 14.7 9 21 9.8l-4.5 4.2 1.2 6.2L12 17.2 6.3 20.2l1.2-6.2L3 9.8 9.3 9Z" stroke-linejoin="round" fill="currentColor"/>',
   termometro: '<path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/><path d="M12 9v5"/>',
-  duplicar: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'
+  duplicar: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  coche: '<path d="M4 16v-3.5L6 8h12l2 4.5V16"/><path d="M4 16h16"/><circle cx="7.5" cy="17.5" r="1.6"/><circle cx="16.5" cy="17.5" r="1.6"/>',
+  gota: '<path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11Z"/>',
+  reloj: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  tema: '<circle cx="12" cy="12" r="7"/><path d="M12 5a7 7 0 0 0 0 14Z" fill="currentColor" stroke="none"/>',
+  campana: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2.5h-15L6 16Z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
+  nube: '<path d="M7 18a4 4 0 1 1 .7-7.94A5 5 0 0 1 17.5 12H18a3 3 0 0 1 0 6H7Z"/>',
+  descarga: '<path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/>'
 };
 var TITULOS_ICONO = { papelera:'Eliminar', duplicar:'Duplicar' };
 function aplicarIconos(){
@@ -3009,6 +3141,7 @@ function renderLugares(){
 document.getElementById('lista-lugares').addEventListener('click', function(e){
   var btn = e.target.closest('[data-quitar-favorito]');
   if(!btn) return;
+  marcarBorrado('favoritos', btn.dataset.quitarFavorito);
   DATOS.favoritos = DATOS.favoritos.filter(function(f){ return f.id!==btn.dataset.quitarFavorito; });
   guardarDatos();
   renderLugares();
@@ -3277,6 +3410,7 @@ document.getElementById('lista-planes').addEventListener('click', function(e){
   var borrar = e.target.closest('[data-borrar-plan]');
   if(borrar){
     confirmarAccion('Eliminar plan', 'Se borrará este plan guardado.', function(){
+      marcarBorrado('planes', borrar.dataset.borrarPlan);
       DATOS.planes = DATOS.planes.filter(function(p){ return p.id!==borrar.dataset.borrarPlan; });
       guardarDatos(); renderPlanes();
       toast('Plan eliminado');
@@ -3380,10 +3514,12 @@ document.getElementById('leaflet-map').addEventListener('click', function(e){
   var id = btn.dataset.favOcm;
   var existe = DATOS.favoritos.some(function(f){ return f.id===id; });
   if(existe){
+    marcarBorrado('favoritos', id);
     DATOS.favoritos = DATOS.favoritos.filter(function(f){ return f.id!==id; });
     btn.textContent = '☆ Guardar en favoritos';
     toast('Quitado de favoritos');
   } else {
+    desmarcarBorrado('favoritos', id);
     DATOS.favoritos.push({ id:id, nombre:btn.dataset.favNombre, lat:parseFloat(btn.dataset.favLat), lng:parseFloat(btn.dataset.favLng) });
     btn.textContent = '★ En favoritos';
     toast('Guardado en favoritos');
@@ -3420,10 +3556,11 @@ function guardarCambiosVehiculo(){
   if(!isNaN(nuevoOdometro) && nuevoOdometro >= 0) DATOS.vehiculo.odometro_km = nuevoOdometro;
   else document.getElementById('veh-odometro').value = DATOS.vehiculo.odometro_km;
   DATOS.seguro.fecha_renovacion = document.getElementById('veh-seguro').value;
+  DATOS.itv.fecha = document.getElementById('veh-itv').value;
   guardarDatos();
   renderDashboard(); renderBateria(); renderEstadisticas(); renderGastos();
 }
-['veh-modelo','veh-fecha-compra','veh-capacidad','veh-autonomia','veh-seguro'].forEach(function(id){
+['veh-modelo','veh-fecha-compra','veh-capacidad','veh-autonomia','veh-seguro','veh-itv'].forEach(function(id){
   document.getElementById(id).addEventListener('change', guardarCambiosVehiculo);
 });
 document.getElementById('veh-odometro').addEventListener('change', function(){
@@ -3576,26 +3713,46 @@ function b64DecodeUnicode(b64){
   }).join(''));
 }
 
-function fusionarPorId(remotoArr, localArr){
+function fusionarPorId(remotoArr, localArr, borrados){
   var mapa = {};
   (remotoArr||[]).forEach(function(x){ mapa[x.id] = x; });
   (localArr||[]).forEach(function(x){ mapa[x.id] = x; }); // local gana en conflicto (más reciente en este dispositivo)
+  if(borrados){ Object.keys(borrados).forEach(function(id){ delete mapa[id]; }); } // evita que un elemento borrado en otro dispositivo resucite
   return Object.values(mapa);
 }
+// Une las "tumbas" (ids borrados) de ambos dispositivos, para que una eliminación hecha en cualquiera de los dos se respete.
+function fusionarBorrados(remotoB, localB){
+  var u = {};
+  Object.assign(u, remotoB||{}, localB||{});
+  return u;
+}
 function fusionarDatos(remoto, local){
+  var bR = (remoto && remoto._borrados) || {};
+  var bL = (local && local._borrados) || {};
+  var borrados = {
+    viajes: fusionarBorrados(bR.viajes, bL.viajes),
+    cargas: fusionarBorrados(bR.cargas, bL.cargas),
+    gastos: fusionarBorrados(bR.gastos, bL.gastos),
+    recordatorios: fusionarBorrados(bR.recordatorios, bL.recordatorios),
+    accesorios: fusionarBorrados(bR.accesorios, bL.accesorios),
+    planes: fusionarBorrados(bR.planes, bL.planes),
+    favoritos: fusionarBorrados(bR.favoritos, bL.favoritos)
+  };
   return normalizarDatos({
     vehiculo: local.vehiculo || remoto.vehiculo,
     referencia_gasolina: local.referencia_gasolina || remoto.referencia_gasolina,
     bateria_historico: fusionarPorFecha(remoto.bateria_historico, local.bateria_historico),
-    viajes: fusionarPorId(remoto.viajes, local.viajes),
-    cargas: fusionarPorId(remoto.cargas, local.cargas),
-    gastos: fusionarPorId(remoto.gastos, local.gastos),
-    recordatorios: fusionarPorId(remoto.recordatorios, local.recordatorios),
+    viajes: fusionarPorId(remoto.viajes, local.viajes, borrados.viajes),
+    cargas: fusionarPorId(remoto.cargas, local.cargas, borrados.cargas),
+    gastos: fusionarPorId(remoto.gastos, local.gastos, borrados.gastos),
+    recordatorios: fusionarPorId(remoto.recordatorios, local.recordatorios, borrados.recordatorios),
     neumaticos: local.neumaticos || remoto.neumaticos,
-    accesorios: fusionarPorId(remoto.accesorios, local.accesorios),
-    planes: fusionarPorId(remoto.planes, local.planes),
-    favoritos: fusionarPorId(remoto.favoritos, local.favoritos),
-    seguro: local.seguro || remoto.seguro
+    accesorios: fusionarPorId(remoto.accesorios, local.accesorios, borrados.accesorios),
+    planes: fusionarPorId(remoto.planes, local.planes, borrados.planes),
+    favoritos: fusionarPorId(remoto.favoritos, local.favoritos, borrados.favoritos),
+    _borrados: borrados,
+    seguro: local.seguro || remoto.seguro,
+    itv: local.itv || remoto.itv
   });
 }
 function fusionarPorFecha(remotoArr, localArr){
@@ -3605,10 +3762,17 @@ function fusionarPorFecha(remotoArr, localArr){
   return Object.keys(mapa).sort().map(function(k){ return mapa[k]; });
 }
 
-function estadoSync(msg, error){
+function estadoSync(msg, error, estadoForzado){
   var el = document.getElementById('gh-estado');
+  var dot = document.getElementById('gh-estado-dot');
   el.textContent = msg;
-  el.style.color = error ? 'var(--acc)' : 'var(--txt3)';
+  el.style.color = error ? 'var(--acc)' : 'var(--txt)';
+  if(dot){
+    var cls = estadoForzado || (error ? 'err'
+      : (msg.indexOf('Sincronizando')===0 ? 'busy'
+      : (msg.indexOf('Sincronizado correctamente')===0 ? 'ok' : 'pend')));
+    dot.className = 'epunto '+cls;
+  }
 }
 
 document.getElementById('gh-guardar-config').addEventListener('click', function(){
