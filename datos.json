@@ -1,8 +1,8 @@
 {
   "vehiculo": {
-    "modelo": "Model Y Premium Dual Motor Long Range",
+    "modelo": "Model Y \"Juniper\" Tracción Total / Long Range (2025– )",
     "capacidad_nominal_kwh": 75,
-    "autonomia_wltp_km": 525,
+    "autonomia_wltp_km": 586,
     "fecha_compra": "2026-01-15",
     "odometro_km": 18240,
     "estado": "aparcado"
@@ -145,7 +145,19 @@
   ],
   "planes": [],
   "favoritos": [],
+  "_borrados": {
+    "viajes": {},
+    "cargas": {},
+    "gastos": {},
+    "recordatorios": {},
+    "accesorios": {},
+    "planes": {},
+    "favoritos": {}
+  },
   "seguro": {
     "fecha_renovacion": "2027-03-01"
+  },
+  "itv": {
+    "fecha": ""
   }
 }
