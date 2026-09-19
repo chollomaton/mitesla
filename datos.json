@@ -1,5 +1,6 @@
 {
   "vehiculo": {
+    "modelo": "Model Y Premium Dual Motor Long Range",
     "capacidad_nominal_kwh": 75,
     "autonomia_wltp_km": 525,
     "fecha_compra": "2026-01-15",
@@ -143,5 +144,8 @@
     }
   ],
   "planes": [],
-  "favoritos": []
+  "favoritos": [],
+  "seguro": {
+    "fecha_renovacion": "2027-03-01"
+  }
 }
