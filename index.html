@@ -805,8 +805,8 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
     <div class="sec-h"><h2>Conexión con Tesla</h2></div>
     <div class="lista" style="margin-bottom:10px">
       <div style="padding:16px" class="form-grid">
-        <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" placeholder="Pendiente de tu cuenta de desarrollador"></label>
-        <label>URL del backend (Cloudflare Worker)<input type="text" id="tesla-backend-url" placeholder="https://api.tudominio.com"></label>
+        <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" autocomplete="off" data-lpignore="true" placeholder="Pendiente de tu cuenta de desarrollador"></label>
+        <label>URL del backend (Cloudflare Worker)<input type="text" id="tesla-backend-url" autocomplete="off" data-lpignore="true" placeholder="https://api.tudominio.com"></label>
         <div class="form-acciones">
           <button class="btn-secundario" id="tesla-guardar-config">Guardar config.</button>
           <button class="btn-primario" id="tesla-conectar">Conectar con Tesla</button>
@@ -820,9 +820,9 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
     <div class="sec-h"><h2>Sincronización con GitHub</h2></div>
     <div class="lista" style="margin-bottom:10px">
       <div style="padding:16px" class="form-grid">
-        <label>Repositorio (usuario/repo)<input type="text" id="gh-repo" placeholder="tuusuario/mitesla-datos"></label>
-        <label>Ruta del archivo<input type="text" id="gh-path" placeholder="datos.json"></label>
-        <label>Token personal (PAT)<input type="password" id="gh-token" placeholder="ghp_..."></label>
+        <label>Repositorio (usuario/repo)<input type="text" id="gh-repo" autocomplete="off" data-lpignore="true" placeholder="tuusuario/mitesla-datos"></label>
+        <label>Ruta del archivo<input type="text" id="gh-path" autocomplete="off" data-lpignore="true" placeholder="datos.json"></label>
+        <label>Token personal (PAT)<input type="password" id="gh-token" autocomplete="new-password" data-lpignore="true" placeholder="ghp_..."></label>
         <div class="form-acciones">
           <button class="btn-secundario" id="gh-guardar-config">Guardar config.</button>
           <button class="btn-primario" id="gh-sync">Sincronizar ahora</button>
@@ -1042,7 +1042,7 @@ function obtenerViajesTrabajoFiltrados(){
   }
   var viajesTrabajo = DATOS.viajes.filter(function(v){
     if(v.etiqueta !== 'trabajo') return false;
-    var d = new Date(v.fecha+'T00:00:00');
+    var d = new Date(v.fecha);
     if(desde && d < desde) return false;
     if(hasta && d > hasta) return false;
     return true;
@@ -1058,7 +1058,7 @@ document.getElementById('btn-informe-trabajo-csv').addEventListener('click', fun
   if(!r) return;
   var tarifa = r.tarifa;
   var csv = aCSV(r.viajes, [
-    {titulo:'Fecha', valor:function(v){return new Date(v.fecha+'T00:00:00').toLocaleDateString('es-ES');}},
+    {titulo:'Fecha', valor:function(v){return new Date(v.fecha).toLocaleDateString('es-ES');}},
     {titulo:'Origen', valor:function(v){return v.origen;}},
     {titulo:'Destino', valor:function(v){return v.destino;}},
     {titulo:'Conductor', valor:function(v){return v.conductor||'';}},
@@ -1076,7 +1076,7 @@ document.getElementById('btn-informe-trabajo').addEventListener('click', functio
   var totalImporte = !isNaN(tarifa) ? totalKm*tarifa : null;
 
   var filas = viajesTrabajo.map(function(v){
-    return '<tr><td>'+new Date(v.fecha+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+'</td>'+
+    return '<tr><td>'+new Date(v.fecha).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+'</td>'+
       '<td>'+esc(v.origen)+' → '+esc(v.destino)+'</td>'+
       '<td>'+esc(v.conductor||'—')+'</td>'+
       '<td style="text-align:right">'+v.km.toFixed(1)+' km</td>'+
@@ -1118,8 +1118,8 @@ document.getElementById('btn-informe-trabajo').addEventListener('click', functio
 
 document.getElementById('btn-exportar-pdf').addEventListener('click', function(){
   var a\u00F1o = new Date().getFullYear();
-  var viajesA\u00F1o = DATOS.viajes.filter(function(v){ return new Date(v.fecha+'T00:00:00').getFullYear()===a\u00F1o; });
-  var cargasA\u00F1o = DATOS.cargas.filter(function(c){ return new Date(c.fecha+'T00:00:00').getFullYear()===a\u00F1o; });
+  var viajesA\u00F1o = DATOS.viajes.filter(function(v){ return new Date(v.fecha).getFullYear()===a\u00F1o; });
+  var cargasA\u00F1o = DATOS.cargas.filter(function(c){ return new Date(c.fecha).getFullYear()===a\u00F1o; });
   var km = viajesA\u00F1o.reduce(function(s,v){ return s+v.km; }, 0);
   var kwh = cargasA\u00F1o.reduce(function(s,c){ return s+c.kwh; }, 0);
   var costeTesla = cargasA\u00F1o.reduce(function(s,c){ return s+c.kwh*c.precio_kwh; }, 0);
@@ -1133,13 +1133,13 @@ document.getElementById('btn-exportar-pdf').addEventListener('click', function()
   var bateriaActual = DATOS.bateria_historico.length ? DATOS.bateria_historico[DATOS.bateria_historico.length-1].capacidad_pct : null;
 
   var porMes = {};
-  viajesA\u00F1o.forEach(function(v){ var m=new Date(v.fecha+'T00:00:00').getMonth(); porMes[m]=(porMes[m]||0)+v.km; });
+  viajesA\u00F1o.forEach(function(v){ var m=new Date(v.fecha).getMonth(); porMes[m]=(porMes[m]||0)+v.km; });
   var filasMes = MESES_LARGO.map(function(nombre,i){
     return '<tr><td>'+nombre+'</td><td style="text-align:right">'+(porMes[i]?porMes[i].toFixed(0):'0')+' km</td></tr>';
   }).join('');
 
   var top5Viajes = viajesA\u00F1o.slice().sort(function(a,b){return b.km-a.km;}).slice(0,5)
-    .map(function(v){ return '<tr><td>'+new Date(v.fecha+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})+'</td><td>'+esc(v.origen)+' \u2192 '+esc(v.destino)+'</td><td style="text-align:right">'+v.km.toFixed(0)+' km</td></tr>'; })
+    .map(function(v){ return '<tr><td>'+new Date(v.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'short'})+'</td><td>'+esc(v.origen)+' \u2192 '+esc(v.destino)+'</td><td style="text-align:right">'+v.km.toFixed(0)+' km</td></tr>'; })
     .join('') || '<tr><td colspan="3" style="color:#888">Sin viajes registrados</td></tr>';
 
   var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe Mi Tesla '+a\u00F1o+'</title><style>'+
@@ -1408,7 +1408,7 @@ var MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','ago
 function agruparPorMes(items, htmlFila){
   var grupos = [], mesActual = null, actual = null;
   items.forEach(function(item){
-    var d = new Date(item.fecha+'T00:00:00');
+    var d = new Date(item.fecha);
     var clave = d.getFullYear()+'-'+d.getMonth();
     if(clave !== mesActual){
       mesActual = clave;
@@ -1438,7 +1438,7 @@ function renderViajes(){
   var ahora = new Date();
   var qViajes = normalizarTexto(document.getElementById('buscar-viajes').value);
   var filtrados = viajes.filter(function(v){
-    var d = new Date(v.fecha+'T00:00:00');
+    var d = new Date(v.fecha);
     if(filtroViajeActivo==='7dias' && (ahora-d) > 7*24*3600*1000) return false;
     if(filtroViajeActivo==='mes' && !(d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth())) return false;
     if(qViajes && normalizarTexto(v.origen+' '+v.destino).indexOf(qViajes)===-1) return false;
@@ -1609,8 +1609,8 @@ function renderAjustes(){
   document.getElementById('gh-path').value = cfg.path || 'datos.json';
   document.getElementById('gh-token').value = cfg.token || '';
   var tcfg = cargarConfigTesla();
-  document.getElementById('tesla-client-id').value = tcfg.clientId || '';
-  document.getElementById('tesla-backend-url').value = tcfg.backendUrl || '';
+  document.getElementById('tesla-client-id').value = tcfg.clientId || TESLA_CONFIG_POR_DEFECTO.clientId;
+  document.getElementById('tesla-backend-url').value = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
   var ultimaSync = localStorage.getItem('mitesla-ultima-sync');
   if(ultimaSync){
     document.getElementById('gh-estado').textContent = 'Última sincronización: '+new Date(ultimaSync).toLocaleString('es-ES');
@@ -1639,8 +1639,8 @@ function renderEstadisticas(){
 
   var ahoraStats = new Date();
   var añoActual = ahoraStats.getFullYear();
-  var kmEsteAño = DATOS.viajes.filter(function(v){ return new Date(v.fecha+'T00:00:00').getFullYear()===añoActual; }).reduce(function(s,v){ return s+v.km; }, 0);
-  var kmUltimos7Dias = DATOS.viajes.filter(function(v){ return (ahoraStats-new Date(v.fecha+'T00:00:00')) <= 7*24*3600*1000; }).reduce(function(s,v){ return s+v.km; }, 0);
+  var kmEsteAño = DATOS.viajes.filter(function(v){ return new Date(v.fecha).getFullYear()===añoActual; }).reduce(function(s,v){ return s+v.km; }, 0);
+  var kmUltimos7Dias = DATOS.viajes.filter(function(v){ return (ahoraStats-new Date(v.fecha)) <= 7*24*3600*1000; }).reduce(function(s,v){ return s+v.km; }, 0);
 
   document.getElementById('stats-km').innerHTML =
     '<div class="card"><div class="lbl">Totales</div><div class="val">'+kmOdometro.toLocaleString('es-ES')+' km</div><div class="sub">Desde la compra</div></div>'+
@@ -1703,8 +1703,8 @@ function renderComparadorTemporada(){
   var mesActual = ahora.getMonth(), añoActual = ahora.getFullYear();
 
   function statsDelMes(mes, año){
-    var viajesMes = DATOS.viajes.filter(function(v){ var d=new Date(v.fecha+'T00:00:00'); return d.getMonth()===mes && d.getFullYear()===año; });
-    var cargasMes = DATOS.cargas.filter(function(c){ var d=new Date(c.fecha+'T00:00:00'); return d.getMonth()===mes && d.getFullYear()===año; });
+    var viajesMes = DATOS.viajes.filter(function(v){ var d=new Date(v.fecha); return d.getMonth()===mes && d.getFullYear()===año; });
+    var cargasMes = DATOS.cargas.filter(function(c){ var d=new Date(c.fecha); return d.getMonth()===mes && d.getFullYear()===año; });
     var km = viajesMes.reduce(function(s,v){return s+v.km;},0);
     var coste = cargasMes.reduce(function(s,c){return s+c.kwh*c.precio_kwh;},0);
     return { km:km, coste:coste, n:viajesMes.length };
@@ -1737,8 +1737,8 @@ document.getElementById('btn-resumen-anual').addEventListener('click', function(
   this.classList.add('on');
 
   var año = new Date().getFullYear();
-  var viajesAño = DATOS.viajes.filter(function(v){ return new Date(v.fecha+'T00:00:00').getFullYear()===año; });
-  var cargasAño = DATOS.cargas.filter(function(c){ return new Date(c.fecha+'T00:00:00').getFullYear()===año; });
+  var viajesAño = DATOS.viajes.filter(function(v){ return new Date(v.fecha).getFullYear()===año; });
+  var cargasAño = DATOS.cargas.filter(function(c){ return new Date(c.fecha).getFullYear()===año; });
   var km = viajesAño.reduce(function(s,v){ return s+v.km; }, 0);
   var kwh = cargasAño.reduce(function(s,c){ return s+c.kwh; }, 0);
   var costeTesla = cargasAño.reduce(function(s,c){ return s+c.kwh*c.precio_kwh; }, 0);
@@ -1750,7 +1750,7 @@ document.getElementById('btn-resumen-anual').addEventListener('click', function(
   var mejorConsumo = consumos.length ? Math.min.apply(null,consumos) : null;
 
   var porMes = {};
-  viajesAño.forEach(function(v){ var m=new Date(v.fecha+'T00:00:00').getMonth(); porMes[m]=(porMes[m]||0)+v.km; });
+  viajesAño.forEach(function(v){ var m=new Date(v.fecha).getMonth(); porMes[m]=(porMes[m]||0)+v.km; });
   var mesTop = Object.keys(porMes).sort(function(a,b){ return porMes[b]-porMes[a]; })[0];
 
   cont.style.display = '';
@@ -1832,7 +1832,7 @@ function nivelCargaActual(){
   return ev ? ev.pct : 80;
 }
 function tiempoRelativo(fechaStr){
-  var diffMs = new Date() - new Date(fechaStr+'T00:00:00');
+  var diffMs = new Date() - new Date(fechaStr); // fechaStr es de un viaje/carga (datetime-local), ya incluye hora
   var min = Math.floor(diffMs/60000);
   if(min < 1) return 'ahora mismo';
   if(min < 60) return 'hace '+min+' min';
@@ -1841,7 +1841,7 @@ function tiempoRelativo(fechaStr){
   var dias = Math.floor(horas/24);
   if(dias === 1) return 'ayer';
   if(dias < 30) return 'hace '+dias+' días';
-  return new Date(fechaStr+'T00:00:00').toLocaleDateString('es-ES', {day:'numeric', month:'short'});
+  return new Date(fechaStr).toLocaleDateString('es-ES', {day:'numeric', month:'short'});
 }
 
 function renderDashboard(){
@@ -2118,8 +2118,8 @@ function dibujarChartCosteKm(){
     return;
   }
   var eventos = [];
-  DATOS.viajes.forEach(function(v){ eventos.push({ fecha:new Date(v.fecha+'T00:00:00'), km:v.km }); });
-  DATOS.cargas.forEach(function(c){ eventos.push({ fecha:new Date(c.fecha+'T00:00:00'), coste:c.kwh*c.precio_kwh }); });
+  DATOS.viajes.forEach(function(v){ eventos.push({ fecha:new Date(v.fecha), km:v.km }); });
+  DATOS.cargas.forEach(function(c){ eventos.push({ fecha:new Date(c.fecha), coste:c.kwh*c.precio_kwh }); });
   eventos.sort(function(a,b){ return a.fecha-b.fecha; });
 
   var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -2803,7 +2803,7 @@ function dibujarChartKmMes(){
     meses.push({ mes:d.getMonth(), año:d.getFullYear(), m:MESES[d.getMonth()], v:0 });
   }
   DATOS.viajes.forEach(function(v){
-    var d = new Date(v.fecha+'T00:00:00');
+    var d = new Date(v.fecha);
     var slot = meses.find(function(x){ return x.mes===d.getMonth() && x.año===d.getFullYear(); });
     if(slot) slot.v += v.km;
   });
@@ -2823,6 +2823,7 @@ function dibujarChartKmMes(){
 }
 
 /* ---------- Conexión Tesla (OAuth) — activable cuando tengas Client ID + backend ---------- */
+var TESLA_CONFIG_POR_DEFECTO = { clientId:'3b8ae070-eec0-4768-8838-edbd897f869d', backendUrl:'https://api.laperestronika.com' }; // app "MiEV" ya registrada ante Tesla — dato público, no secreto
 function cargarConfigTesla(){
   try{ return JSON.parse(localStorage.getItem('mitesla-tesla-config')) || {}; }
   catch(e){ return {}; }
@@ -3016,7 +3017,7 @@ function dibujarRutas(periodo){
 
   var ahora = new Date();
   var viajesPeriodo = DATOS.viajes.filter(function(v){
-    var d = new Date(v.fecha+'T00:00:00');
+    var d = new Date(v.fecha);
     if(periodo==='semana') return (ahora-d) <= 7*24*3600*1000;
     if(periodo==='mes') return d.getFullYear()===ahora.getFullYear() && d.getMonth()===ahora.getMonth();
     if(periodo==='año') return d.getFullYear()===ahora.getFullYear();
@@ -3547,9 +3548,19 @@ document.getElementById('gh-guardar-config').addEventListener('click', function(
   estadoSync('Configuración guardada en este dispositivo.');
 });
 
+var syncGithubEnCurso = false;
 async function sincronizarGithub(opciones){
   opciones = opciones || {};
   var silencioso = !!opciones.silencioso;
+  if(syncGithubEnCurso){ if(!silencioso) estadoSync('Ya hay una sincronización en curso…'); return; }
+  syncGithubEnCurso = true;
+  try{
+    return await sincronizarGithubInterno(opciones, silencioso);
+  } finally {
+    syncGithubEnCurso = false;
+  }
+}
+async function sincronizarGithubInterno(opciones, silencioso){
   var cfg = silencioso ? cargarConfigGithub() : {
     repo: document.getElementById('gh-repo').value.trim(),
     path: document.getElementById('gh-path').value.trim() || 'datos.json',
