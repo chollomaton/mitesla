@@ -995,7 +995,7 @@ document.getElementById('btn-empezar-cero').addEventListener('click', function()
     });
     guardarDatos();
     renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
-    renderLugares(); renderPlanes();
+    renderLugares(); renderPlanes(); renderNeumaticos(); renderAccesorios();
     if(typeof renderListaBateria==='function') renderListaBateria();
     toast('Datos reiniciados \u2014 listo para tu coche real');
   }, 'Empezar de cero');
@@ -1100,7 +1100,7 @@ document.getElementById('btn-informe-trabajo').addEventListener('click', functio
     '@media print{body{padding:0}}'+
     '</style></head><body>'+
     '<h1>Informe de kilometraje de trabajo</h1>'+
-    '<div class="sub">Periodo: '+rangoTexto+' · Vehículo: '+(DATOS.vehiculo.modelo||'Model Y')+' · Generado el '+new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div>'+
+    '<div class="sub">Periodo: '+rangoTexto+' · Vehículo: '+esc(DATOS.vehiculo.modelo||'Model Y')+' · Generado el '+new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div>'+
     '<table><thead><tr><th>Fecha</th><th>Trayecto</th><th>Conductor</th><th style="text-align:right">Km</th>'+(totalImporte!==null?'<th style="text-align:right">Importe</th>':'')+'</tr></thead><tbody>'+
     filas+'</tbody></table>'+
     '<div class="totales">Total: <b>'+totalKm.toFixed(1)+' km</b> en '+viajesTrabajo.length+' viaje'+(viajesTrabajo.length===1?'':'s')+
@@ -1156,7 +1156,7 @@ document.getElementById('btn-exportar-pdf').addEventListener('click', function()
     '@media print{body{padding:0}}'+
     '</style></head><body>'+
     '<h1>Informe anual \u00B7 '+a\u00F1o+'</h1>'+
-    '<div class="sub">Mi Tesla \u2014 '+(DATOS.vehiculo.modelo||'Model Y')+' \u00B7 Generado el '+new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div>'+
+    '<div class="sub">Mi Tesla \u2014 '+esc(DATOS.vehiculo.modelo||'Model Y')+' \u00B7 Generado el '+new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'</div>'+
     '<h2>Resumen del a\u00F1o</h2>'+
     '<div class="grid">'+
     '<div class="card"><div class="l">Kil\u00F3metros</div><div class="v">'+km.toLocaleString('es-ES')+' km</div></div>'+
@@ -1197,7 +1197,7 @@ document.getElementById('input-importar').addEventListener('change', function(e)
         DATOS = importado;
         guardarDatos();
         renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
-        renderLugares(); renderPlanes();
+        renderLugares(); renderPlanes(); renderNeumaticos(); renderAccesorios();
         if(mapaLeaflet) pintarFavoritosEnMapa();
         toast('Datos importados');
       }, 'Importar');
@@ -1262,7 +1262,7 @@ function toast(msg, esError){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function(){ el.classList.remove('on'); }, 2600);
 }
-function confirmarAccion(titulo, texto, onConfirmar, textoBoton){
+function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
   document.getElementById('modal-titulo').textContent = titulo;
   document.getElementById('modal-texto').textContent = texto;
   var fondo = document.getElementById('modal-fondo');
@@ -1270,7 +1270,7 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton){
   var btnOk = document.getElementById('modal-confirmar');
   var btnNo = document.getElementById('modal-cancelar');
   btnOk.textContent = textoBoton || 'Eliminar';
-  btnOk.style.background = textoBoton ? 'var(--acc2)' : 'var(--acc)';
+  btnOk.style.background = seguro ? 'var(--acc2)' : 'var(--acc)'; // rojo salvo que se marque explícitamente como acción no destructiva
   function cerrar(){ fondo.classList.remove('on'); btnOk.removeEventListener('click', ok); btnNo.removeEventListener('click', cerrar); }
   function ok(){ cerrar(); onConfirmar(); }
   function clicFuera(e){ if(e.target===fondo) cerrar(); }
@@ -1491,7 +1491,7 @@ function renderBateria(){
   var ciclos = Math.round(totalKwh/nominal);
 
   // Curva de referencia típica publicada para baterías Tesla (aprox.): ~5% el primer año, ~1,5%/año después.
-  var meses = Math.max(0, (new Date() - new Date(DATOS.vehiculo.fecha_compra)) / (1000*3600*24*30.44));
+  var meses = Math.max(0, (new Date() - new Date(DATOS.vehiculo.fecha_compra+'T00:00:00')) / (1000*3600*24*30.44));
   var esperado = 100 - (5*Math.min(meses,12)/12) - (1.5*Math.max(meses-12,0)/12);
   var diferencia = actual - esperado;
 
@@ -1756,7 +1756,7 @@ document.getElementById('btn-resumen-anual').addEventListener('click', function(
   cont.style.display = '';
   cont.innerHTML =
     '<div style="text-align:center;padding:6px 0 14px">'+
-    '<div style="font-size:13px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em">Tu '+año+' con el '+(DATOS.vehiculo.modelo?DATOS.vehiculo.modelo.split(' ')[0]+' '+DATOS.vehiculo.modelo.split(' ')[1]:'Model Y')+'</div>'+
+    '<div style="font-size:13px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em">Tu '+año+' con el '+esc(DATOS.vehiculo.modelo?DATOS.vehiculo.modelo.split(' ').slice(0,2).join(' '):'Model Y')+'</div>'+
     '</div>'+
     '<div class="grid2">'+
     '<div class="card"><div class="lbl">Kilómetros</div><div class="val">'+km.toLocaleString('es-ES')+' km</div><div class="sub">'+viajesAño.length+' viajes</div></div>'+
@@ -2036,7 +2036,7 @@ function renderGastos(){
   document.getElementById('lista-gastos').innerHTML = filas;
 
   var km = DATOS.vehiculo.odometro_km;
-  var mesesDesdeCompra = Math.max(1, Math.round((new Date() - new Date(DATOS.vehiculo.fecha_compra)) / (1000*3600*24*30.44)));
+  var mesesDesdeCompra = Math.max(1, Math.round((new Date() - new Date(DATOS.vehiculo.fecha_compra+'T00:00:00')) / (1000*3600*24*30.44)));
   document.getElementById('resumen-costes').innerHTML =
     '<div class="card"><div class="lbl">'+li('euro')+'Coste por km</div><div class="val">'+(km>0 ? (totalGeneral/km).toFixed(3) : '—')+' €</div><div class="sub">Total / '+km.toLocaleString('es-ES')+' km</div></div>'+
     '<div class="card"><div class="lbl">'+li('euro')+'Coste mensual</div><div class="val">'+Math.round(totalGeneral/mesesDesdeCompra)+' €</div><div class="sub">Media desde la compra ('+mesesDesdeCompra+' meses)</div></div>';
@@ -2926,7 +2926,7 @@ function renderLugares(){
   if(destinoTop){
     filas.push('<div class="fila">'+
       '<div class="ico" style="background:rgba(232,52,42,.12);color:var(--acc)" data-icon="pin"></div>'+
-      '<div class="fila-tx"><div class="t1">'+destinoTop+'</div><div class="t2">Destino más frecuente · '+conteoDestinos[destinoTop].n+' viajes</div></div>'+
+      '<div class="fila-tx"><div class="t1">'+esc(destinoTop)+'</div><div class="t2">Destino más frecuente · '+conteoDestinos[destinoTop].n+' viajes</div></div>'+
       '<div class="fila-r"><div class="r1">'+(conteoDestinos[destinoTop].kmTotal/conteoDestinos[destinoTop].n).toFixed(1)+' km med.</div></div></div>');
   }
   (DATOS.favoritos||[]).forEach(function(f){
@@ -2967,14 +2967,17 @@ function cargarLeafletSiHaceFalta(){
   return leafletCargando;
 }
 
+var mapaIniciando = false;
 async function iniciarMapa(){
-  if(mapaLeaflet || !document.getElementById('leaflet-map')) return;
+  if(mapaLeaflet || mapaIniciando || !document.getElementById('leaflet-map')) return;
+  mapaIniciando = true; // guarda síncrona: evita crear el mapa dos veces si se cambia de pestaña dos veces seguidas antes de que cargue Leaflet
   var mapaEl = document.getElementById('leaflet-map');
   mapaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--txt3);font-size:13px">Cargando mapa…</div>';
   try{
     await cargarLeafletSiHaceFalta();
   }catch(e){
     mapaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--txt3);font-size:13px">No se pudo cargar el mapa. Revisa tu conexión.</div>';
+    mapaIniciando = false;
     return;
   }
   mapaEl.innerHTML = '';
@@ -3110,6 +3113,7 @@ async function cargarClimaYAjustarAutonomia(){
 var capaAlcance = null;
 document.getElementById('btn-alcance').addEventListener('click', function(){
   var btn = this;
+  if(!mapaLeaflet) return; // el mapa todavía está cargando
   if(capaAlcance){
     mapaLeaflet.removeLayer(capaAlcance);
     capaAlcance = null;
@@ -3234,7 +3238,7 @@ function popupCargador(p, potenciaMax){
   return '<b>'+esc(p.AddressInfo.Title||'Cargador público')+'</b><br>'+
     (potenciaMax? potenciaMax+' kW · ' : '') + esc(p.AddressInfo.AddressLine1||'') +
     '<br><button class="ver" style="margin-top:6px;display:inline-block" data-fav-ocm="'+idFav+'" '+
-    'data-fav-nombre="'+(p.AddressInfo.Title||'Cargador público').replace(/"/g,'&quot;')+'" '+
+    'data-fav-nombre="'+esc(p.AddressInfo.Title||'Cargador público')+'" '+
     'data-fav-lat="'+p.AddressInfo.Latitude+'" data-fav-lng="'+p.AddressInfo.Longitude+'">'+
     (esFavorito ? '★ En favoritos' : '☆ Guardar en favoritos')+'</button>';
 }
@@ -3258,6 +3262,7 @@ function pintarCargadoresPublicos(){
 
 var cargadoresPublicosPeticionId = 0;
 document.getElementById('btn-cargadores-publicos').addEventListener('click', async function(){
+  if(!mapaLeaflet) return; // el mapa todavía está cargando
   var btn = this;
   var estado = document.getElementById('cargadores-estado');
   var filtroPot = document.getElementById('filtro-potencia');
@@ -3362,7 +3367,7 @@ document.getElementById('veh-odometro').addEventListener('change', function(){
     confirmarAccion('¿Odómetro más bajo que antes?', 'Vas a cambiar el odómetro de '+anterior.toLocaleString('es-ES')+' km a '+nuevo.toLocaleString('es-ES')+' km, un valor inferior al actual. Confirma solo si es una corrección intencionada.', function(){
       campo.value = nuevo;
       guardarCambiosVehiculo();
-    }, 'Confirmar');
+    }, 'Confirmar', true);
     return;
   }
   guardarCambiosVehiculo();
@@ -3600,7 +3605,7 @@ async function sincronizarGithubInterno(opciones, silencioso){
     guardarDatos(true); // true = no relanzar autosync mientras ya estamos sincronizando
     // Reflejamos el resultado de la fusión en la UI de inmediato, aunque el PUT de abajo falle luego
     renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
-    renderLugares(); renderPlanes();
+    renderLugares(); renderPlanes(); renderNeumaticos(); renderAccesorios();
     if(mapaLeaflet) pintarFavoritosEnMapa();
 
     var contenido = b64EncodeUnicode(JSON.stringify(DATOS, null, 2));
