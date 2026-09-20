@@ -1,0 +1,18 @@
+[Unit]
+Description=Mi Tesla - puente MQTT -> Cloudflare Worker (Fase 4A)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mitesla/telemetry-bridge
+EnvironmentFile=/opt/mitesla/telemetry-bridge/.env
+ExecStart=/usr/bin/node /opt/mitesla/telemetry-bridge/index.js
+Restart=always
+RestartSec=5
+User=mitesla
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

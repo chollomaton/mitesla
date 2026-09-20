@@ -1,0 +1,66 @@
+# Mi Tesla — Fase 4A — pipeline de telemetría en la VM Always Free.
+# Tesla -> fleet-telemetry (TLS, puerto 443) -> Mosquitto (solo localhost) -> mitesla-telemetry-bridge -> Worker (HTTPS+HMAC)
+#
+# Puesta en marcha exacta: ver README.md de esta carpeta. Resumen:
+#   1. cp .env.example .env   y rellenar los valores reales.
+#   2. cp fleet-telemetry.config.json.template fleet-telemetry.config.json  y rellenar.
+#   3. Certificados TLS reales en ./tls/fullchain.pem y ./tls/privkey.pem (Let's Encrypt).
+#   4. docker compose up -d
+#
+# Coste: 0 €/mes — los tres servicios corren en una única VM Always Free (Oracle Cloud
+# recomendado; Google Cloud Free Tier como alternativa), sin ningún servicio gestionado de pago.
+version: "3.8"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    network_mode: "host" # más simple para que fleet-telemetry y el bridge lo vean en 127.0.0.1:1883
+
+  fleet-telemetry:
+    # A22 (FASE A, auditoría externa 2026-09-20): ":latest" se actualiza solo en cada `docker
+    # compose pull`/reinicio del daemon, sin que nadie lo decida ni lo pruebe antes — inaceptable
+    # para el componente que recibe telemetría real de un vehículo con dinero de por medio. Se fija
+    # una versión concreta y probada; actualízala a mano, leyendo el CHANGELOG del proyecto oficial
+    # (github.com/teslamotors/fleet-telemetry/releases) y revalidando A5 (campos soportados) antes.
+    # HONESTIDAD: no se ha podido verificar en vivo cuál es el último tag/digest real publicado
+    # de teslamotors/fleet-telemetry en el momento de escribir esto (la última comprobación
+    # disponible mostraba hasta v0.9.3, junio 2024 — casi con seguridad desactualizado a fecha de
+    # despliegue real). Por eso NO se deja un número de versión inventado aquí. Antes de desplegar:
+    #   1. mira github.com/teslamotors/fleet-telemetry/releases (o `git tag` sobre el repo)
+    #   2. elige el tag más reciente que tenga imagen publicada en Docker Hub (tesla/fleet-telemetry
+    #      en hub.docker.com/r/tesla/fleet-telemetry/tags) — o, mejor aún, usa el digest sha256:...
+    #      de esa imagen concreta en vez de solo el tag, para que sea inmutable de verdad
+    #   3. sustituye "PIN_MANUAL_REQUERIDO" por ese tag o digest exacto
+    #   4. revalida A5 (campos soportados por esa versión) antes de registrar fleet_telemetry_config
+    # ":latest" queda descartado deliberadamente (A22): se actualizaría solo en cada `docker compose
+    # pull`/reinicio del daemon, sin que nadie lo decida ni lo pruebe antes.
+    image: tesla/fleet-telemetry:PIN_MANUAL_REQUERIDO
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    network_mode: "host"
+    volumes:
+      - ./fleet-telemetry.config.json:/etc/fleet-telemetry/config.json:ro
+      - ./tls:/etc/fleet-telemetry/tls:ro
+    command: ["-config", "/etc/fleet-telemetry/config.json"]
+
+  telemetry-bridge:
+    build: ../telemetry-bridge
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    network_mode: "host"
+    env_file:
+      - .env
+    volumes:
+      - bridge-cola:/data
+    environment:
+      RUTA_COLA_PENDIENTE: /data/cola-pendiente.jsonl
+
+volumes:
+  mosquitto-data:
+  bridge-cola:

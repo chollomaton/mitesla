@@ -1,0 +1,39 @@
+{
+  "_comentario": "Plantilla de config.json para el servidor OFICIAL teslamotors/fleet-telemetry. Copiar a fleet-telemetry.config.json y rellenar los <MAYUSCULAS>. Estructura verificada contra la documentación oficial del propio proyecto (README.md y datastore/mqtt/README.md) el 2026-09-20 — sección 81 de la Fase 4: comprobar siempre contra la documentación vigente antes de desplegar, por si ha cambiado.",
+  "host": "0.0.0.0",
+  "port": 443,
+  "log_level": "info",
+  "json_log_enable": true,
+  "namespace": "mitesla",
+  "reliable_ack": true,
+  "transmit_decoded_records": true,
+  "tls": {
+    "server_cert": "/etc/fleet-telemetry/tls/fullchain.pem",
+    "server_key": "/etc/fleet-telemetry/tls/privkey.pem"
+  },
+  "mtls": {
+    "_comentario": "mTLS (verificación del certificado del propio vehículo) es opcional según el README oficial; se deja activable pero no obligatoria para no bloquear el arranque si el proceso de emisión de certificados de cliente aún no está resuelto.",
+    "enabled": false
+  },
+  "mqtt": {
+    "broker": "127.0.0.1:1883",
+    "client_id": "fleet-telemetry",
+    "topic_base": "mitesla_telemetry",
+    "qos": 1,
+    "retained": false,
+    "connect_timeout_ms": 30000,
+    "publish_timeout_ms": 2500,
+    "disconnect_timeout_ms": 250,
+    "connect_retry_interval_ms": 10000,
+    "keep_alive_seconds": 30
+  },
+  "rate_limit": {
+    "enabled": true,
+    "message_limit": 1000
+  },
+  "records": {
+    "alerts": ["mqtt"],
+    "errors": ["mqtt"],
+    "V": ["mqtt"]
+  }
+}
