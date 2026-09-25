@@ -1,36 +1,94 @@
 {
+  "schema_version": 2,
+  "dataset_id": "0cb0cb9b-05bb-4e3e-83f5-b591940d6e3a",
+  "data_mode": "real",
+  "device_id": "ec954bb8-6ecc-40e7-b75b-ee7e7b973b6e",
   "vehiculo": {
     "modelo": "Model Y \"Juniper\" Tracción Total / Long Range (2025– )",
     "capacidad_nominal_kwh": 75,
     "autonomia_wltp_km": 586,
     "fecha_compra": "2026-01-15",
     "odometro_km": 18240,
-    "estado": "aparcado"
+    "estado": "aparcado",
+    "tracking_started_at": "2026-09-25T18:13:24.000Z",
+    "odometer_at_tracking_start": 18240,
+    "updated_at": "2026-09-25T18:13:24.000Z"
   },
   "referencia_gasolina": {
     "consumo_l_100km": 7,
-    "precio_litro": 1.55
+    "precio_litro": 1.55,
+    "updated_at": "2026-09-25T18:13:24.000Z"
   },
   "bateria_historico": [
     {
       "fecha": "2026-01-15",
-      "capacidad_pct": 100
+      "capacidad_pct": 100,
+      "id": "95046317-59b6-491b-a1f7-fca0cf69780d",
+      "created_at": "2026-01-14T23:00:00.000Z",
+      "updated_at": "2026-01-14T23:00:00.000Z"
+    },
+    {
+      "fecha": "2026-01-15",
+      "capacidad_pct": 100,
+      "id": "054b093b-acc3-4e64-b007-30d3bb02a0db",
+      "created_at": "2026-01-14T23:00:00.000Z",
+      "updated_at": "2026-01-14T23:00:00.000Z"
     },
     {
       "fecha": "2026-03-15",
-      "capacidad_pct": 99.4
+      "capacidad_pct": 99.4,
+      "id": "f8c3f5b7-7632-4fcd-be7c-8b6714441bb7",
+      "created_at": "2026-03-14T23:00:00.000Z",
+      "updated_at": "2026-03-14T23:00:00.000Z"
+    },
+    {
+      "fecha": "2026-03-15",
+      "capacidad_pct": 99.4,
+      "id": "30c5acf1-50ea-4d82-958d-42a8a8e1b992",
+      "created_at": "2026-03-14T23:00:00.000Z",
+      "updated_at": "2026-03-14T23:00:00.000Z"
     },
     {
       "fecha": "2026-05-15",
-      "capacidad_pct": 98.6
+      "capacidad_pct": 98.6,
+      "id": "1eec3c24-1e6e-43f7-b516-b2ff23603ee2",
+      "created_at": "2026-05-14T22:00:00.000Z",
+      "updated_at": "2026-05-14T22:00:00.000Z"
+    },
+    {
+      "fecha": "2026-05-15",
+      "capacidad_pct": 98.6,
+      "id": "d9df3078-5fe9-439a-b872-a67b1b0d102b",
+      "created_at": "2026-05-14T22:00:00.000Z",
+      "updated_at": "2026-05-14T22:00:00.000Z"
     },
     {
       "fecha": "2026-07-15",
-      "capacidad_pct": 98
+      "capacidad_pct": 98,
+      "id": "1a6a684d-9663-4cd4-adca-6bbae9d7166e",
+      "created_at": "2026-07-14T22:00:00.000Z",
+      "updated_at": "2026-07-14T22:00:00.000Z"
+    },
+    {
+      "fecha": "2026-07-15",
+      "capacidad_pct": 98,
+      "id": "3ea4a40f-a3ae-4333-bb17-50b807307ad7",
+      "created_at": "2026-07-14T22:00:00.000Z",
+      "updated_at": "2026-07-14T22:00:00.000Z"
     },
     {
       "fecha": "2026-09-01",
-      "capacidad_pct": 97.3
+      "capacidad_pct": 97.3,
+      "id": "243459cb-07de-49fe-98fa-93ccbb6b3adc",
+      "created_at": "2026-08-31T22:00:00.000Z",
+      "updated_at": "2026-08-31T22:00:00.000Z"
+    },
+    {
+      "fecha": "2026-09-01",
+      "capacidad_pct": 97.3,
+      "id": "0386f254-f337-45aa-9987-008984cd5e9d",
+      "created_at": "2026-08-31T22:00:00.000Z",
+      "updated_at": "2026-08-31T22:00:00.000Z"
     }
   ],
   "viajes": [
@@ -42,7 +100,9 @@
       "km": 28.4,
       "duracion_min": 31,
       "bateria_inicial": 82,
-      "bateria_final": 76
+      "bateria_final": 76,
+      "created_at": "2026-09-12T07:12:00.000Z",
+      "updated_at": "2026-09-12T07:12:00.000Z"
     },
     {
       "id": "v002",
@@ -52,7 +112,9 @@
       "km": 28.1,
       "duracion_min": 29,
       "bateria_inicial": 88,
-      "bateria_final": 82
+      "bateria_final": 82,
+      "created_at": "2026-09-11T17:47:00.000Z",
+      "updated_at": "2026-09-11T17:47:00.000Z"
     },
     {
       "id": "v003",
@@ -62,7 +124,9 @@
       "km": 62.7,
       "duracion_min": 46,
       "bateria_inicial": 95,
-      "bateria_final": 82
+      "bateria_final": 82,
+      "created_at": "2026-09-08T05:20:00.000Z",
+      "updated_at": "2026-09-08T05:20:00.000Z"
     }
   ],
   "cargas": [
@@ -74,7 +138,21 @@
       "kwh": 22.4,
       "precio_kwh": 0.16,
       "bateria_inicial": 32,
-      "bateria_final": 80
+      "bateria_final": 80,
+      "created_at": "2026-09-10T21:10:00.000Z",
+      "updated_at": "2026-09-10T21:10:00.000Z",
+      "ac_dc": null,
+      "red": null,
+      "potencia_max_kw": null,
+      "total_cost": 3.58,
+      "cost_source": "estimado",
+      "data_source": "manual",
+      "notas": "",
+      "vehicle_id": null,
+      "fecha_fin": null,
+      "perdidas_pct": null,
+      "kwh_red_estimado": null,
+      "origen_energia": null
     },
     {
       "id": "c002",
@@ -84,7 +162,21 @@
       "kwh": 41.2,
       "precio_kwh": 0.35,
       "bateria_inicial": 18,
-      "bateria_final": 90
+      "bateria_final": 90,
+      "created_at": "2026-09-06T10:05:00.000Z",
+      "updated_at": "2026-09-06T10:05:00.000Z",
+      "ac_dc": null,
+      "red": null,
+      "potencia_max_kw": null,
+      "total_cost": 14.42,
+      "cost_source": "estimado",
+      "data_source": "manual",
+      "notas": "",
+      "vehicle_id": null,
+      "fecha_fin": null,
+      "perdidas_pct": null,
+      "kwh_red_estimado": null,
+      "origen_energia": null
     }
   ],
   "gastos": [
@@ -93,26 +185,34 @@
       "fecha": "2026-03-01",
       "categoria": "seguro",
       "concepto": "Seguro anual",
-      "importe": 620
+      "importe": 620,
+      "created_at": "2026-02-28T23:00:00.000Z",
+      "updated_at": "2026-02-28T23:00:00.000Z"
     },
     {
       "id": "g002",
       "fecha": "2026-07-15",
       "categoria": "neumaticos",
       "concepto": "4 neumáticos",
-      "importe": 780
+      "importe": 780,
+      "created_at": "2026-07-14T22:00:00.000Z",
+      "updated_at": "2026-07-14T22:00:00.000Z"
     }
   ],
   "recordatorios": [
     {
       "id": "r001",
       "concepto": "Rotación / cambio de neumáticos",
-      "km_objetivo": 40000
+      "km_objetivo": 40000,
+      "created_at": "2026-09-25T18:13:24.000Z",
+      "updated_at": "2026-09-25T18:13:24.000Z"
     },
     {
       "id": "r002",
       "concepto": "ITV",
-      "km_objetivo": 60000
+      "km_objetivo": 60000,
+      "created_at": "2026-09-25T18:13:24.000Z",
+      "updated_at": "2026-09-25T18:13:24.000Z"
     }
   ],
   "neumaticos": {
@@ -125,7 +225,8 @@
       "fecha_instalacion": "2026-01-15",
       "km_instalacion": 0,
       "vida_util_km": 45000
-    }
+    },
+    "updated_at": "2026-09-25T18:13:24.000Z"
   },
   "accesorios": [
     {
@@ -133,14 +234,18 @@
       "nombre": "Alfombrillas todo tiempo",
       "categoria": "proteccion",
       "fecha": "2026-01-20",
-      "precio": 89
+      "precio": 89,
+      "created_at": "2026-01-19T23:00:00.000Z",
+      "updated_at": "2026-01-19T23:00:00.000Z"
     },
     {
       "id": "a002",
       "nombre": "Cable Type 2 portátil",
       "categoria": "carga",
       "fecha": "2026-02-03",
-      "precio": 145
+      "precio": 145,
+      "created_at": "2026-02-02T23:00:00.000Z",
+      "updated_at": "2026-02-02T23:00:00.000Z"
     }
   ],
   "planes": [],
@@ -152,12 +257,23 @@
     "recordatorios": {},
     "accesorios": {},
     "planes": {},
-    "favoritos": {}
+    "favoritos": {},
+    "bateria_historico": {},
+    "plantillas_viaje": {},
+    "neumaticos_historico": {},
+    "mantenimiento": {},
+    "documentos": {}
   },
   "seguro": {
-    "fecha_renovacion": "2027-03-01"
+    "fecha_renovacion": "2027-03-01",
+    "updated_at": "2026-09-25T18:13:24.000Z"
   },
   "itv": {
-    "fecha": ""
-  }
+    "fecha": "",
+    "updated_at": "2026-09-25T18:13:24.000Z"
+  },
+  "plantillas_viaje": [],
+  "neumaticos_historico": [],
+  "mantenimiento": [],
+  "documentos": []
 }
