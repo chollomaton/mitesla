@@ -1,7 +1,7 @@
 {
-  "backend/clean-production-adapter.mjs": "d03dbe766d28a3bd1584d88eaae73d306e513b0117e5b09010505399c7c6ad2e",
+  "backend/clean-production-adapter.mjs": "d8b15e29c3ab6c8dde554acfbd6a299c66b4f0582580d4b8de9369d300b790eb",
   "backend/session-auth.mjs": "d293cb528d6efdb1d60a487b39f0575711e09f6c85d6ee76b7c32ca340020d14",
-  "backend/worker.js": "d13cbd0a5784019bcefc2c4a0221130911ab7aca8fdf7e94c4f006fc7a768bb3",
+  "backend/worker.js": "aabfd920b2abb3a10b8c1c5b18244fab7069c0b7f067396de6c00e82ea0147ac",
   "d1/migrations/0001_initial.sql": "d252a6a5b9b5fde127e6b16daa1e493c2e3c24c558ca6e81d2deace0395da19e",
   "d1/migrations/0002_capacidad_nominal_vehiculo.sql": "e9899193198ec5b44d2e6bf50667890ff32f743e9a78906ef2ed9bb476973b96",
   "d1/migrations/0003_power_snapshots.sql": "6a43e3998159cd1a5d0741028f4ad1d714b75d1f5ea1512fd70c034414f71541",
@@ -10,5 +10,9 @@
   "d1/migrations/0006_data_canonical_lifecycle.sql": "43b18e30eea8f4815ebd9d968b57e21591201cddfbd8a20073efda67ba483121",
   "d1/migrations/0007_c1_authority.sql": "351e9b7ed44d3508e26d463390ffb55050fac022f1fe6f859b79a682162a8462",
   "d1/migrations/0008_session_auth.sql": "dab27e2017284ab2c47c47058151b0c3e8623ccf77a5938773ba3555c28ff954",
-  "d1/schema.sql": "0335fdfb4a61f968e665e8b487331b609a339a844929c23c1654102b62b55804"
+  "d1/schema.sql": "00baba5b7abde03206f51e5345d294ee540595a23f862ef08fab37db836d6737",
+  "d1/migrations/0009_telemetry_integrity.sql": "01617d6e899f998bbb148163ce2871f580b45a1e0113b83d86202d9b31b3ce85",
+  "backend/telemetry-integrity.mjs": "8fd08d927c537aca64b120d38b2a382582a1e46b96c452cf8930771fa733bf3f",
+  "telemetry-bridge/index.js": "8b6aa2c64ab88f5c8cb8a8b830c6bbe0d538c2c58c71c351c54ab4fa8996541e",
+  "telemetry-bridge/lib/cola.js": "7a9f74d87372e0798c14137203774bfcdd0aa159372c0a87185b4883515de3d4"
 }

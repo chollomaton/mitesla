@@ -2,14 +2,15 @@
   "name": "mitesla",
   "version": "4.1.0",
   "private": true,
-  "description": "Mi Tesla — PWA personal de gestión de Tesla Model Y (frontend estático + Cloudflare Worker + pipeline de telemetría). Ver tests/README.md y las carpetas d1/, infra/, telemetry-bridge/.",
+  "description": "Mi Tesla \u2014 PWA personal de gesti\u00f3n de Tesla Model Y (frontend est\u00e1tico + Cloudflare Worker + pipeline de telemetr\u00eda). Ver tests/README.md y las carpetas d1/, infra/, telemetry-bridge/.",
   "scripts": {
     "test": "bash tests/run-all.sh",
     "test:bridge": "cd telemetry-bridge && npm ci && npm test",
     "test:all": "npm test && npm run test:bridge",
     "playwright:install": "playwright install --with-deps chromium",
     "test:backup": "python3 -m unittest discover -s tools/backup -p test_backup.py -v",
-    "test:backup:remote-contract": "python3 -m unittest discover -s tools/backup -p test_remote.py -v"
+    "test:backup:remote-contract": "python3 -m unittest discover -s tools/backup -p test_remote.py -v",
+    "test:telemetry": "node tests/test_telemetry_integrity.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.0"

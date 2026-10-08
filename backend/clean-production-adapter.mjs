@@ -1,9 +1,9 @@
 import worker,{readAuthority,adminAuthentication} from './worker.js';
-export const EMPTY_TABLES=["vehicles", "telemetry_nonces", "vehicle_vin_allowlist", "vehicle_settings", "bridge_heartbeats", "usage_counters", "quarantined_events", "oauth_start_tokens", "oauth_refresh_lock", "vehicle_snapshots", "telemetry_events_short_retention", "trips", "charging_sessions", "locations", "automation_rules", "pending_actions", "alerts", "battery_snapshots", "odometer_snapshots", "sync_state", "power_snapshots", "push_subscriptions", "push_config"];
+export const EMPTY_TABLES=["vehicles", "telemetry_observations", "telemetry_nonces", "vehicle_vin_allowlist", "vehicle_settings", "bridge_heartbeats", "usage_counters", "quarantined_events", "oauth_start_tokens", "oauth_refresh_lock", "vehicle_snapshots", "telemetry_events_short_retention", "trips", "charging_sessions", "locations", "automation_rules", "pending_actions", "alerts", "battery_snapshots", "odometer_snapshots", "sync_state", "power_snapshots", "push_subscriptions", "push_config"];
 export async function verifyEmpty(env){
  const fk=await env.DB.prepare('PRAGMA foreign_key_check').all();if(fk.results.length)throw Error('foreign_keys');
  const ledger=await env.DB.prepare('SELECT name FROM d1_migrations ORDER BY name').all();
- if(JSON.stringify(ledger.results.map(x=>x.name))!==JSON.stringify(['0001_initial.sql','0002_capacidad_nominal_vehiculo.sql','0003_power_snapshots.sql','0004_tpms.sql','0005_push_real.sql','0006_data_canonical_lifecycle.sql','0007_c1_authority.sql','0008_session_auth.sql']))throw Error('migration_ledger');
+ if(JSON.stringify(ledger.results.map(x=>x.name))!==JSON.stringify(['0001_initial.sql','0002_capacidad_nominal_vehiculo.sql','0003_power_snapshots.sql','0004_tpms.sql','0005_push_real.sql','0006_data_canonical_lifecycle.sql','0007_c1_authority.sql','0008_session_auth.sql','0009_telemetry_integrity.sql']))throw Error('migration_ledger');
  for(const table of EMPTY_TABLES)if((await env.DB.prepare('SELECT COUNT(*) AS n FROM '+table).first()).n!==0)throw Error('target_not_empty:'+table);
  return {empty:true,foreignKeys:0};
 }
