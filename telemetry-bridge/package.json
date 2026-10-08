@@ -2,12 +2,12 @@
   "name": "mitesla-telemetry-bridge",
   "version": "1.0.0",
   "private": true,
-  "description": "Puente MQTT -> Cloudflare Worker para la telemetría de Fleet Telemetry de un único vehículo Tesla. Se ejecuta en la misma VM Always Free que Mosquitto y el servidor oficial teslamotors/fleet-telemetry.",
+  "description": "Puente MQTT -> Cloudflare Worker para la telemetr\u00eda de Fleet Telemetry de un \u00fanico veh\u00edculo Tesla. Se ejecuta en la misma VM Always Free que Mosquitto y el servidor oficial teslamotors/fleet-telemetry.",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node test.js"
+    "test": "node test.js && node test-integrity.js"
   },
   "dependencies": {
     "mqtt": "^5.10.0"

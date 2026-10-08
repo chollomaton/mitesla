@@ -56,13 +56,14 @@ function comprobarConfigObligatoria() {
 function iniciar() {
   comprobarConfigObligatoria();
 
-  let estadoActual = {};
-  let seguimiento = crearSeguimientoTransiciones();
   const cola = new ColaPersistente(CONFIG.rutaColaPendiente);
-  if (cola.corrupcionDetectada) {
-    console.error('[mitesla-telemetry-bridge] ATENCIÓN: la cola en disco tenía líneas corruptas al arrancar (%d descartadas de la cola activa, conservadas en %s). Revísalo antes de confiar en la telemetría de este arranque.',
-      cola.lineasCorruptasDescartadas, cola.rutaCuarentena || '(no se pudo conservar)');
-  }
+  if (cola.corrupcionDetectada) throw Error('durable_state_corrupted_review_required');
+  const recovered=cola.checkpoint;
+  if (recovered && recovered.vin !== CONFIG.vin) throw Error('checkpoint_vin_conflict');
+  if (!recovered && cola.tamano) throw Error('legacy_pending_queue_requires_checkpoint_review');
+  let estadoActual=recovered?.estadoActual || {};
+  let seguimiento=recovered?.seguimiento || crearSeguimientoTransiciones();
+
 
   // A9: contadores/heartbeat locales, reportados al Worker en cada ciclo para el health check real.
   let señalesDesdeUltimoEnvio = 0;
@@ -92,10 +93,12 @@ function iniciar() {
     const ahoraIso = new Date(ahoraMs).toISOString();
     if (info.seccion === 'v' && info.resto) {
       const metrica = parsearValorMetrica(payloadBuf.toString('utf8'));
-      estadoActual = actualizarEstado(estadoActual, info.resto, metrica, ahoraIso);
+      const nuevoEstado = actualizarEstado(estadoActual, info.resto, metrica, ahoraIso);
       // A1: el candidato se actualiza EN CADA MENSAJE (no en el ciclo de envío) para que el
       // cronómetro de estabilidad se mida desde el instante real de observación.
-      seguimiento = actualizarSeguimientoTransiciones(seguimiento, estadoActual, ahoraMs);
+      const nuevoSeguimiento = actualizarSeguimientoTransiciones(seguimiento, nuevoEstado, ahoraMs);
+      cola.confirmarEstado({vin:CONFIG.vin,estadoActual:nuevoEstado,seguimiento:nuevoSeguimiento});
+      estadoActual=nuevoEstado;seguimiento=nuevoSeguimiento;
     } else if (info.seccion === 'connectivity') {
       huboConnectivityDesdeUltimoEnvio = true;
       try {
@@ -124,8 +127,8 @@ function iniciar() {
         debounceMs: CONFIG.debounceTransicionMs,
         maxContextAgeMs: CONFIG.maxContextAgeMs
       });
+      cola.confirmarEstado({vin:CONFIG.vin,estadoActual,seguimiento:resultado.seguimiento},resultado.eventos);
       seguimiento = resultado.seguimiento;
-      for (const ev of resultado.eventos) cola.encolar(ev);
 
       const eventosAEnviar = cola.peekBatch(500); // A15: el Worker también limita a 500/petición
       const snapshot = Object.keys(estadoActual).length ? construirSnapshot(estadoActual) : null;
@@ -149,6 +152,7 @@ function iniciar() {
       señalesDesdeUltimoEnvio = 0;
       huboConnectivityDesdeUltimoEnvio = false;
     } catch (e) {
+      if(e.persistenceCommitUncertain) process.exit(1);
       console.error('[mitesla-telemetry-bridge] fallo enviando el lote, se reintentará en el próximo ciclo (nada se pierde, sigue en la cola):', e.message);
     } finally {
       cola.finalizarEnvio();
