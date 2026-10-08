@@ -1,5 +1,6 @@
 """Offline transport contract tests. These never certify live Cloudflare D1."""
-import copy,sqlite3,unittest,uuid
+import copy,sqlite3,unittest,uuid,io,json
+from unittest.mock import patch
 import backup,remote,certify_remote
 import test_backup
 class SQLiteAPI:
@@ -60,6 +61,25 @@ class RemoteTests(unittest.TestCase):
         self.assertTrue(all(v=='DELETED' for v in report['cleanup'].values()))
         self.assertEqual(report['production_reads'],0)
         self.assertEqual(report['tests']['secrets_excluded'],'PASS')
+    def test_http_contract_and_scalar_bindings(self):
+        response={'success':True,'result':[{'success':True,'results':[{'n':0}]}]}
+        with patch('urllib.request.urlopen',return_value=io.BytesIO(json.dumps(response).encode())) as opened:
+            self.assertEqual(remote.API('synthetic-token').query(str(uuid.uuid4()),'SELECT ?', [None,0,False]),[{'n':0}])
+            request=opened.call_args[0][0]
+            self.assertEqual(json.loads(request.data)['params'],[None,0,False])
+            self.assertIn('/accounts/'+remote.ACCOUNT+'/d1/database/',request.full_url)
+            self.assertEqual(request.get_method(),'POST')
+    def test_api_query_failure_closed(self):
+        response={'success':True,'result':[{'success':False,'results':[]}]}
+        with patch('urllib.request.urlopen',return_value=io.BytesIO(json.dumps(response).encode())):
+            with self.assertRaises(backup.Invalid):remote.API('synthetic-token').query(str(uuid.uuid4()),'SELECT 1')
+    def test_capture_truncation_rejected(self):
+        source=self.run.create('source');self.run.restore(self.body,source);original=self.api.query
+        def query(db,sql,params=()):
+            result=original(db,sql,params)
+            return [] if sql=='SELECT * FROM "trips"' else result
+        self.api.query=query
+        with self.assertRaisesRegex(backup.Invalid,'count mismatch'):self.run.export(source,'test')
     def test_raw_api_production_denied_before_http(self):
         api=remote.API('synthetic-never-sent')
         with self.assertRaises(backup.Invalid):api.query(remote.PRODUCTION,'SELECT 1')

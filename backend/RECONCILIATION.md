@@ -8,4 +8,4 @@ El arnés SQLite aplica las ocho migraciones y activa FK. prepare sin bind y con
 
 La política certificada BUSINESS_WRITE_GUARD permite LEGACY/PREPARED/CANONICAL y bloquea IMPORTING/VERIFYING. Los tests comprueban esa compatibilidad, no imponen una política distinta. Un tombstone no se revive mediante create/patch; restore explícito es una operación separada del producto.
 
-Checks ejecutables: npm test (48 scripts), npm run test:backup (19 casos), npm run test:backup:remote-contract (9 casos), npm run test:bridge. Node >=22.13 con node:sqlite es necesario para el arnés de SQLite real (entorno certificado: Node 24.21.0). No hay scripts de type/lint/build en el proyecto.
+Checks ejecutables: npm test (48 scripts), npm run test:backup (19 casos), npm run test:backup:remote-contract (12 casos), npm run test:bridge. Node >=22.13 con node:sqlite es necesario para el arnés de SQLite real (entorno certificado: Node 24.21.0). No hay scripts de type/lint/build en el proyecto.
