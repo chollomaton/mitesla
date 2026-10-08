@@ -7,7 +7,8 @@
     "test": "bash tests/run-all.sh",
     "test:bridge": "cd telemetry-bridge && npm ci && npm test",
     "test:all": "npm test && npm run test:bridge",
-    "playwright:install": "playwright install --with-deps chromium"
+    "playwright:install": "playwright install --with-deps chromium",
+    "test:backup": "python3 -m unittest discover -s tools/backup -p test_backup.py -v"
   },
   "devDependencies": {
     "playwright": "1.56.0"

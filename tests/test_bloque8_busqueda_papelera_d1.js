@@ -184,7 +184,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     function assert(cond, msg){ res.push((cond?'✅ ':'❌ FALLO: ')+msg); }
     await probarConexionD1();
     var texto = document.getElementById('d1-estado').textContent;
-    assert(texto.indexOf('No se pudo contactar')!==-1 || texto.indexOf('Error del servidor')!==-1 || texto.indexOf('binding D1')!==-1 || texto.indexOf('clave de administración')!==-1, 'sin un backend D1 real desplegado ni clave configurada, "Probar conexión" informa de un fallo real, nunca de un éxito simulado: "'+texto+'"');
+    assert(texto.indexOf('No se pudo contactar')!==-1 || texto.indexOf('Error del servidor')!==-1 || texto.indexOf('binding D1')!==-1 || texto.indexOf('clave de administración')!==-1 || texto.indexOf('Falta la token de sesión')!==-1, 'sin un backend D1 real desplegado ni clave configurada, "Probar conexión" informa de un fallo real, nunca de un éxito simulado: "'+texto+'"');
     return { res: res };
   });
   out7.res.forEach(l => console.log(l));
