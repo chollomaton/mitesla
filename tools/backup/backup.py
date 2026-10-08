@@ -3,7 +3,7 @@ import argparse, datetime, hashlib, json, math, os, pathlib, re, sqlite3
 ROOT = pathlib.Path(__file__).resolve().parent
 TABLES = ('vehicles', 'vehicle_vin_allowlist', 'vehicle_settings', 'automation_rules',
           'locations', 'trips', 'charging_sessions', 'pending_actions', 'alerts',
-          'battery_snapshots', 'odometer_snapshots', 'power_snapshots', 'system_state')
+          'battery_snapshots', 'odometer_snapshots', 'power_snapshots', 'telemetry_observations', 'system_state')
 VERSION = 1
 SECRET = re.compile(r'^(admin|admin_token|sessions?|github_pat|pat|token|token_hash|access_token|refresh_token|tesla_tokens|oauth|password|secret|private_key|bearer)$', re.I)
 class Invalid(ValueError): pass
@@ -14,7 +14,7 @@ def canonical(value):
 def digest(value): return hashlib.sha256(canonical(value)).hexdigest()
 def migrations():
     files = sorted((ROOT / 'migrations').glob('*.sql'))
-    require(len(files) == 8, 'migration inventory invalid')
+    require(len(files) == 9, 'migration inventory invalid')
     return files
 def pins():
     actual = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in migrations()}

@@ -18,7 +18,7 @@ class RemoteTests(unittest.TestCase):
         source=self.run.create('source');self.run.restore(self.body,source)
         exported=self.run.export(source,'synthetic-contract');target=self.run.create('target');self.run.restore(exported,target)
         self.assertEqual(self.run.capture(source),self.run.capture(target));self.assertEqual(exported['collections'],self.body['collections'])
-        self.assertEqual(len(self.run.query(target,'SELECT * FROM d1_migrations')),8)
+        self.assertEqual(len(self.run.query(target,'SELECT * FROM d1_migrations')),9)
         self.assertEqual(self.run.query(target,'SELECT COUNT(*) AS n FROM sessions')[0]['n'],0)
         self.assertEqual(self.run.query(target,'SELECT COUNT(*) AS n FROM oauth_start_tokens')[0]['n'],0)
     def test_production_and_existing_rejected_before_transport(self):

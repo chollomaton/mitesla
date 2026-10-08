@@ -17,6 +17,7 @@ def synthetic_backup():
                 if name=='vin':row[name]='SYNTHETIC'
                 elif primary:row[name]=table+'-id'
                 elif required and default is None:row[name]=0 if kind in ('REAL','INTEGER') else 'synthetic'
+            if table=='telemetry_observations':row.update(source='TESLA_TELEMETRY',fingerprint='b'*64)
             if table=='trips':row.update(revision=7,deleted_at='2026-10-08T00:00:00Z',distance_km=0,manual_override='{"enabled":false,"value":null,"zero":0}')
             if table=='charging_sessions':row.update(revision=9,deleted_at='2026-10-08T00:00:00Z',total_cost=0,fast_charger_present=0)
             columns=list(row);db.execute('INSERT INTO '+table+' ('+','.join(columns)+') VALUES ('+','.join('?' for _ in columns)+')',list(row.values()))
@@ -50,7 +51,7 @@ def certify(api):
             ledger=run.query(db,'SELECT name FROM d1_migrations ORDER BY name')
             backup.require([r['name'] for r in ledger]==[p.name for p in backup.migrations()],'migration ledger mismatch')
             backup.require(not run.query(db,'PRAGMA foreign_key_check'),'FK invalid')
-        report['tests']['migrations']='8/8';report['tests']['foreign_keys']='PASS'
+        report['tests']['migrations']='9/9';report['tests']['foreign_keys']='PASS'
         trip=exported['collections']['trips'][0];charge=exported['collections']['charging_sessions'][0]
         backup.require(trip['revision']==7 and trip['deleted_at'] is not None and trip['distance_km']==0 and trip['ended_at'] is None,'trip invariant failed')
         backup.require(charge['revision']==9 and charge['deleted_at'] is not None and charge['total_cost']==0 and charge['fast_charger_present']==0,'charge invariant failed')
