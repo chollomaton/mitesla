@@ -1,0 +1,101 @@
+{
+  "repository": "chollomaton/mitesla",
+  "branch": "backup-backend-reconcile-certified-runtime",
+  "initial_head": "c3e42ef42ec5112ae49549f947af2963dbec0a73",
+  "certified_code_head": "c38837f04097864dc1c07e679748bbb84755a3bb",
+  "checkpoint_branch_unchanged": "c3e42ef42ec5112ae49549f947af2963dbec0a73",
+  "entry_point": "backend/clean-production-adapter.mjs",
+  "root_wrapper": "worker.js: default clean adapter + named worker exports",
+  "runtime_modules": [
+    "backend/clean-production-adapter.mjs",
+    "backend/worker.js",
+    "backend/session-auth.mjs"
+  ],
+  "excluded_modules": {
+    "backend/production-adapter.mjs": "legacy baseline-g1.json dependency absent; inactive",
+    "backend/canonical-analyzer.mjs": "not required by active runtime",
+    "backend/canonical-migration.mjs": "not required by active runtime",
+    "backend/cutover-plan.mjs": "not required by active runtime"
+  },
+  "source_backend_schema_pins_verified": 16,
+  "active_repo_pins_verified": 12,
+  "pins": {
+    "backend/clean-production-adapter.mjs": "d03dbe766d28a3bd1584d88eaae73d306e513b0117e5b09010505399c7c6ad2e",
+    "backend/session-auth.mjs": "d293cb528d6efdb1d60a487b39f0575711e09f6c85d6ee76b7c32ca340020d14",
+    "backend/worker.js": "d13cbd0a5784019bcefc2c4a0221130911ab7aca8fdf7e94c4f006fc7a768bb3",
+    "d1/migrations/0001_initial.sql": "d252a6a5b9b5fde127e6b16daa1e493c2e3c24c558ca6e81d2deace0395da19e",
+    "d1/migrations/0002_capacidad_nominal_vehiculo.sql": "e9899193198ec5b44d2e6bf50667890ff32f743e9a78906ef2ed9bb476973b96",
+    "d1/migrations/0003_power_snapshots.sql": "6a43e3998159cd1a5d0741028f4ad1d714b75d1f5ea1512fd70c034414f71541",
+    "d1/migrations/0004_tpms.sql": "450fc66820a01d9c26fed07f0aeff0e77041287c10bf4759e5f07002bea5b84f",
+    "d1/migrations/0005_push_real.sql": "3ebb827d4f5fa833fb23961208a60791ef1e87af50faae19cfaba330ea487b12",
+    "d1/migrations/0006_data_canonical_lifecycle.sql": "43b18e30eea8f4815ebd9d968b57e21591201cddfbd8a20073efda67ba483121",
+    "d1/migrations/0007_c1_authority.sql": "351e9b7ed44d3508e26d463390ffb55050fac022f1fe6f859b79a682162a8462",
+    "d1/migrations/0008_session_auth.sql": "dab27e2017284ab2c47c47058151b0c3e8623ccf77a5938773ba3555c28ff954",
+    "d1/schema.sql": "0335fdfb4a61f968e665e8b487331b609a339a844929c23c1654102b62b55804"
+  },
+  "deployment_migrations": [
+    "0001_initial.sql",
+    "0002_capacidad_nominal_vehiculo.sql",
+    "0003_power_snapshots.sql",
+    "0004_tpms.sql",
+    "0005_push_real.sql",
+    "0006_data_canonical_lifecycle.sql",
+    "0007_c1_authority.sql",
+    "0008_session_auth.sql"
+  ],
+  "deployment_backup_migration_bytes": "8/8 PASS",
+  "harness": {
+    "D1": "real node:sqlite DatabaseSync with eight migrations and FK ON; prepare/bind/first/all/run",
+    "session": "SHA256 opaque synthetic session fixtures; real bootstrap/revoke/expiry security tests",
+    "business_fixtures": "CANONICAL synthetic authority and valid parent vehicles/relations",
+    "legacy_assertions": "existing functional assertions retained; auth setup changed from admin to session except backend setup",
+    "authority_policy": "LEGACY/PREPARED/CANONICAL allow business writes; IMPORTING/VERIFYING block according to exact certified implementation"
+  },
+  "tests": {
+    "test_worker": "PASS",
+    "fase4b": "PASS",
+    "fase4c": "PASS",
+    "migrations": "8/8 PASS",
+    "session_auth": "PASS (within 28/28 security assertions)",
+    "authority": "PASS (within 28/28 security assertions)",
+    "guards_lifecycle": "PASS (within 28/28 security assertions)",
+    "backup_suite": "19/19 PASS",
+    "bridge": "PASS",
+    "regression": "48/48 scripts PASS, zero skips",
+    "runtime_syntax": "4/4 PASS: three active modules plus wrapper",
+    "python_syntax": "PASS",
+    "remote_offline_contract": "12/12 PASS (not live D1)",
+    "type": "NOT_CONFIGURED",
+    "lint": "NOT_CONFIGURED",
+    "build": "NOT_CONFIGURED"
+  },
+  "local_state": "LOCAL_RECONCILIATION_PASS",
+  "remote": {
+    "status": "REMOTE_PENDING",
+    "production_reads": 0,
+    "production_mutations": 0,
+    "databases": [],
+    "cleanup": {},
+    "auth": "OAUTH_REFRESH_REJECTED_HTTP_403"
+  },
+  "snapshot_guarantee": "Two full consecutive captures compare deterministic schema and all allowlisted rows byte for byte, table COUNT matches returned length, FK checks. Abort on observed drift or truncation. No global transactional snapshot; ABA/concurrent writers not excluded. Certification DBs isolated synthetic only. Not live-tested.",
+  "production_untouched": true,
+  "production_reads": 0,
+  "production_mutations": 0,
+  "new_remote_services": 0,
+  "cost_new_services_eur": 0,
+  "production_d1_hard_deny": "98d74aae-e2f2-40d0-8c20-3349f08ada1f",
+  "production_authority": "unchanged; not remotely read",
+  "main": "unchanged; no merge/deploy",
+  "commits": [
+    "c38837f04097864dc1c07e679748bbb84755a3bb test(backup): reject truncated capture and verify HTTP transport contract",
+    "fa8a05d510d3daac95ef83502c74980d58eaf2a3 feat(backup): add guarded synthetic D1 export restore and offline contract certification",
+    "cedb1d5ce9e5f015871897961d47687d48d2e0e5 test(backend): verify certified runtime with SQLite D1 and session lifecycle guards",
+    "68f6905bad72da15ccbf2c8722872c1a5f3cd1e0 fix(backend): reconcile exact certified clean production runtime and eight migrations"
+  ],
+  "state": "LOCAL_RECONCILED_REMOTE_PENDING",
+  "blockers": [
+    "Cloudflare OAuth refresh returned HTTP 403; no usable dashboard browser session was available"
+  ],
+  "next_step": "Provide valid temporary scoped Cloudflare authentication and run tools/backup/certify_remote.py; keep production denied."
+}
