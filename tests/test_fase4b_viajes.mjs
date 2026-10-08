@@ -5,7 +5,8 @@ import workerModule, {
   distanciaMetros, emparejarUbicacion, snapshotMasCercano, emparejarEventosEnViajes,
   construirViajeDesdeEventos, clasificarViajeConReglas, procesarViajesPendientes
 } from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { createHash } from 'node:crypto';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -162,6 +163,8 @@ async function pruebasAsincronas() {
   db._sembrarRegla({ id: 'r1', vin: VIN, tipo: 'clasificacion_viaje', condicion: JSON.stringify({ origen_location_id: 'loc-casa', destino_location_id: 'loc-trabajo' }), accion: JSON.stringify({ classification: 'trabajo' }) });
 
   const env = { ALLOWED_ORIGIN: 'https://chollomaton.github.io', ADMIN_TOKEN: 'admin-secreto-123', TELEMETRY_BRIDGE_SECRET: 'bridge-secreto', TESLA_TOKENS: kvEnMemoria(), DB: db };
+  env.SESSION_TOKEN='s'.repeat(43);
+  db._sql.prepare('INSERT INTO sessions(id,token_hash,created_at,expires_at) VALUES(?,?,?,?)').run('test-session',createHash('sha256').update(env.SESSION_TOKEN).digest('hex'),Date.now(),Date.now()+86400000);
   // FASE A (A14/A10): el VIN debe estar autorizado y en modo != 'off' para que /internal/telemetry
   // procese viajes reales — igual que haría /seleccionar-vehiculo + el panel "Automatización".
   db._autorizarYActivar(VIN, 'active');
@@ -217,7 +220,7 @@ async function pruebasAsincronas() {
 
   // 5) /pendientes lista el viaje sin clasificar, y /pendientes/resolver lo cierra a mano.
   let resPend = await workerModule.fetch(new Request('https://api.laperestronika.com/pendientes?vin=' + VIN, {
-    headers: { Authorization: 'Bearer ' + env.ADMIN_TOKEN }
+    headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN }
   }), env);
   let bodyPend = await resPend.json();
   assert(resPend.status === 200 && bodyPend.pendientes.length === 1, 'GET /pendientes devuelve exactamente el pendiente real (viaje trabajo->casa)');
@@ -229,7 +232,7 @@ async function pruebasAsincronas() {
 
   let resResolver = await workerModule.fetch(new Request('https://api.laperestronika.com/pendientes/resolver', {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + env.ADMIN_TOKEN, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: idPendiente, resuelto_con: { classification: 'personal' } })
   }), env);
   const bodyResolver = await resResolver.json();
@@ -242,13 +245,13 @@ async function pruebasAsincronas() {
 
   resResolver = await workerModule.fetch(new Request('https://api.laperestronika.com/pendientes/resolver', {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + env.ADMIN_TOKEN, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: idPendiente, resuelto_con: { classification: 'trabajo' } })
   }), env);
   assert(resResolver.status === 409, 'resolver un pendiente ya resuelto una segunda vez -> 409, no lo vuelve a aplicar');
 
   resPend = await workerModule.fetch(new Request('https://api.laperestronika.com/pendientes?vin=' + VIN, {
-    headers: { Authorization: 'Bearer ' + env.ADMIN_TOKEN }
+    headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN }
   }), env);
   bodyPend = await resPend.json();
   assert(bodyPend.pendientes.length === 0, 'una vez resuelto, el pendiente ya no aparece en la lista de abiertos');

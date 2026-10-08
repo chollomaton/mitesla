@@ -1,15 +1,19 @@
--- Mi Tesla · Fase 4 · esquema Cloudflare D1 (referencia de solo lectura)
+-- Mi Tesla · migración 0001_initial (B18, FASE B) · esquema Cloudflare D1
 -- Diseñado para UN ÚNICO vehículo personal (no multi-tenant): sin overhead de particionado,
 -- índices mínimos pero suficientes para las consultas reales de la app (nunca "SELECT *" sin
 -- filtro de fecha/estado).
 --
--- B18 (FASE B, 2026-09-20): este fichero YA NO es el método de despliegue — se mantiene solo como
--- referencia legible del esquema completo en un único lugar. El despliegue real usa las migraciones
--- versionadas de d1/migrations/ (0001_initial.sql = este mismo contenido tal y como estaba hoy, y
--- cada cambio posterior como un fichero nuevo 0002_*.sql...). Desplegar con:
---   wrangler d1 migrations apply mitesla-datos [--remote]
--- Si en el futuro se edita el esquema, el cambio real va en una migración nueva; este fichero se
--- actualiza a la vez solo para que la vista de conjunto no quede desactualizada, nunca al revés.
+-- B18 (FASE B, 2026-09-20): esto reemplaza la ejecución manual de d1/schema.sql como método de
+-- despliegue. Como la infraestructura nunca ha llegado a desplegarse contra un D1 real con datos
+-- (confirmado en FASE A), todo el esquema existente hasta hoy se convierte en esta ÚNICA migración
+-- inicial en vez de intentar reconstruir un historial de migraciones que nunca existió de verdad.
+-- A partir de aquí, CUALQUIER cambio de esquema (incluido el resto de FASE B) se añade como un
+-- fichero nuevo 0002_*.sql, 0003_*.sql... en este mismo directorio — nunca editando este fichero
+-- ni schema.sql directamente. Aplicar con:
+--   wrangler d1 migrations apply mitesla-datos          (local, para desarrollo)
+--   wrangler d1 migrations apply mitesla-datos --remote  (producción real)
+-- d1/schema.sql se conserva tal cual (ver su cabecera) como referencia legible de "el esquema
+-- completo en un solo fichero", pero deja de ser el método de despliegue.
 --
 -- Política de retención (sección 5 de la Fase 4):
 --   A. vehicle_snapshots      -> 1 fila "viva" por vehículo, se sobrescribe (UPSERT), no crece.
@@ -324,79 +328,3 @@ CREATE TABLE IF NOT EXISTS sync_state (
   mes_referencia TEXT,             -- 'YYYY-MM' al que corresponden los contadores anteriores
   actualizado_en TEXT NOT NULL
 );
-
--- B9 (FASE B, d1/migrations/0002_capacidad_nominal_vehiculo.sql) — capacidad nominal de la batería,
--- necesaria para poder ESTIMAR (nunca inventar) el consumo de un viaje por caída de SoC cuando no
--- hay lecturas de EnergyRemaining fiables al inicio y al final. Nullable: sin este dato, esa
--- estimación concreta simplemente no se calcula.
-ALTER TABLE vehicles ADD COLUMN capacidad_nominal_kwh REAL;
-
--- B11 (FASE B, d1/migrations/0003_power_snapshots.sql) — historial de muestras de potencia de carga,
--- para poder calcular max_power_kw/average_power_kw REALES de una sesión (las columnas ya existían
--- en charging_sessions desde 0001, pero nunca se rellenaban por falta de este historial).
-CREATE TABLE IF NOT EXISTS power_snapshots (
-  id TEXT PRIMARY KEY,
-  vin TEXT NOT NULL REFERENCES vehicles(vin),
-  power_kw REAL NOT NULL,
-  observado_en TEXT NOT NULL,
-  source TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_power_snapshots_vin_fecha ON power_snapshots(vin, observado_en);
-
-ALTER TABLE charging_sessions ADD COLUMN power_samples_count INTEGER;
-
--- B15 (FASE B, d1/migrations/0004_tpms.sql) — presión real de los 4 neumáticos y el umbral de aviso
--- que el usuario fije (nullable: sin configurarlo, nunca se avisa — ver comentario en worker.js).
-ALTER TABLE vehicle_snapshots ADD COLUMN tpms_fl_bar REAL;
-ALTER TABLE vehicle_snapshots ADD COLUMN tpms_fr_bar REAL;
-ALTER TABLE vehicle_snapshots ADD COLUMN tpms_rl_bar REAL;
-ALTER TABLE vehicle_snapshots ADD COLUMN tpms_rr_bar REAL;
-ALTER TABLE vehicle_settings ADD COLUMN tpms_umbral_bar REAL;
-
--- B16 (FASE B, d1/migrations/0005_push_real.sql) — Web Push real: claves VAPID propias, envío real
--- y preferencias de categoría por dispositivo. Ver comentario completo en la propia migración.
-CREATE TABLE IF NOT EXISTS push_subscriptions (
-  device_id TEXT PRIMARY KEY,
-  endpoint TEXT NOT NULL,
-  p256dh TEXT NOT NULL,
-  auth TEXT NOT NULL,
-  categorias TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS push_config (
-  id TEXT PRIMARY KEY,
-  public_key_b64 TEXT NOT NULL,
-  private_key_jwk TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-
-ALTER TABLE alerts ADD COLUMN push_sent_at TEXT;
-ALTER TABLE alerts ADD COLUMN categoria TEXT;
-
--- DATA_CANONICAL / lifecycle mínimo para sesiones consolidadas.
--- No migra contenido ni cambia la autoridad todavía: solo añade concurrencia optimista y tombstone.
-ALTER TABLE trips ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE trips ADD COLUMN deleted_at TEXT;
-ALTER TABLE charging_sessions ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE charging_sessions ADD COLUMN deleted_at TEXT;
-
--- C1: autoridad inicial de una base nueva (0007).
-CREATE TABLE IF NOT EXISTS system_state (key TEXT PRIMARY KEY, value TEXT NOT NULL CHECK(value IN ('LEGACY','PREPARED','IMPORTING','VERIFYING','CANONICAL')), updated_at TEXT NOT NULL);
-INSERT OR IGNORE INTO system_state VALUES ('data_authority','LEGACY',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
-
--- Micro-AA: revocable opaque sessions (0008).
-CREATE TABLE sessions (
- id TEXT PRIMARY KEY NOT NULL,
- token_hash TEXT NOT NULL UNIQUE CHECK(length(token_hash)=64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
- created_at INTEGER NOT NULL CHECK(created_at>0),
- expires_at INTEGER NOT NULL CHECK(expires_at>created_at),
- revoked_at INTEGER CHECK(revoked_at IS NULL OR revoked_at>=created_at),
- last_used_at INTEGER CHECK(last_used_at IS NULL OR last_used_at>=created_at),
- device_label TEXT NOT NULL DEFAULT '' CHECK(length(device_label)<=80)
-);
-CREATE INDEX sessions_expires ON sessions(expires_at);
-CREATE INDEX sessions_active ON sessions(revoked_at, expires_at);

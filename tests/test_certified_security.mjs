@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import worker from '../worker.js';
+import {crearMockD1} from './helpers/sqlite_d1.js';
+const DB=crearMockD1(),env={DB,ADMIN_TOKEN:'backend-only'};
+const call=async(path,method='GET',body,token)=>worker.fetch(new Request('https://synthetic.invalid'+path,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined}),env);
+let checks=0;const check=(a,b,label)=>{assert.deepEqual(a,b,label);checks++;console.log('PASS '+label)};
+const bootstrap=async()=>{const r=await call('/auth/bootstrap','POST',{},env.ADMIN_TOKEN);check(r.status,200,'bootstrap');return (await r.json()).session_token};
+delete env.ADMIN_TOKEN;check((await call('/auth/bootstrap','POST',{})).status,503,'missing admin secret fail closed');env.ADMIN_TOKEN='backend-only';
+check((await call('/auth/bootstrap','POST',{},'wrong')).status,401,'wrong admin');
+check((await call('/canonical/system/authority')).status,401,'missing session');
+check((await call('/canonical/system/authority','GET',undefined,env.ADMIN_TOKEN)).status,401,'admin rejected as browser session');
+check((await call('/canonical/system/authority','GET',undefined,'x'.repeat(43))).status,401,'incorrect opaque bearer rejected');
+const token=await bootstrap();check(token.length,43,'opaque session');const session=DB._sql.prepare('SELECT * FROM sessions').get();check(session.token_hash.length,64,'SHA256 stored');check(JSON.stringify(session).includes(token),false,'no plaintext bearer stored');
+check((await call('/canonical/system/authority','GET',undefined,token)).status,200,'protected route session accepted');
+DB._autorizarYActivar('SYNTHETIC-VIN');
+const trip={id:'synthetic-trip',vin:'SYNTHETIC-VIN',started_at:'2026-10-08T00:00:00Z',source:'MANUAL',distance_km:0,classification:null,manual_override:false};
+for(const authority of ['VERIFYING','IMPORTING']){DB._sql.prepare("UPDATE system_state SET value=? WHERE key='data_authority'").run(authority);const r=await call('/canonical/viajes','POST',trip,token);check(r.status,423,authority+' canonical write blocked');check(DB._sql.prepare('SELECT COUNT(*) AS n FROM trips').get().n,0,'blocked write leaves no data')}
+DB._sql.prepare("UPDATE system_state SET value='LEGACY' WHERE key='data_authority'").run();
+check((await call('/canonical/viajes','POST',{...trip,id:'legacy-compatible'},token)).status,200,'certified LEGACY compatibility permits writes');
+DB._sql.prepare("UPDATE system_state SET value='CANONICAL' WHERE key='data_authority'").run();
+let r=await call('/canonical/viajes','POST',trip,token);check(r.status,200,'canonical create');let entity=(await r.json()).entity;check([entity.distance_km,entity.classification,entity.manual_override],[0,null,false],'zero null false preserved');check(entity.revision,1,'initial revision');
+r=await call('/canonical/viajes/synthetic-trip','PATCH',{expectedRevision:1,patch:{distance_km:2}},token);check((await r.json()).entity.revision,2,'revision increases');check((await call('/canonical/viajes/synthetic-trip','PATCH',{expectedRevision:1,patch:{distance_km:3}},token)).status,409,'stale revision rejected');
+r=await call('/canonical/viajes/synthetic-trip','DELETE',{expectedRevision:2},token);check((await r.json()).entity.revision,3,'tombstone revision increases');check((await call('/canonical/viajes','POST',trip,token)).status,409,'create cannot revive tombstone');check((await call('/canonical/viajes/synthetic-trip','PATCH',{expectedRevision:3,patch:{distance_km:4}},token)).status,409,'patch cannot revive tombstone');check(DB._sql.prepare("SELECT deleted_at FROM trips WHERE id='synthetic-trip'").get().deleted_at!==null,true,'tombstone retained');
+check((await call('/auth/session/revoke','POST',{},token)).status,200,'session revoke');check((await call('/canonical/system/authority','GET',undefined,token)).status,401,'revoked session rejected');
+const expiring=await bootstrap();DB._sql.prepare('UPDATE sessions SET created_at=1,expires_at=2,last_used_at=NULL WHERE revoked_at IS NULL').run();check((await call('/canonical/system/authority','GET',undefined,expiring)).status,401,'expired session rejected');
+console.log(`${checks}/${checks} certified security assertions PASS`);

@@ -1,0 +1,66 @@
+{
+  "production_reads": 0,
+  "production_mutations": 0,
+  "databases": [
+    {
+      "role": "source",
+      "uuid": "f5a752fe-ffe7-4b6a-8288-634d8644624d",
+      "name": "mitesla-backup-cert-source-20261008210827-457f6821"
+    },
+    {
+      "role": "target",
+      "uuid": "c6c90cbb-7905-451a-bdca-4b3a6aa7048a",
+      "name": "mitesla-backup-cert-target-20261008210945-8a270df5"
+    }
+  ],
+  "tests": {
+    "export": "PASS",
+    "corrupt_rejected": "PASS",
+    "incompatible_rejected": "PASS",
+    "restore": "PASS",
+    "equivalence": "PASS",
+    "migrations": "8/8",
+    "foreign_keys": "PASS",
+    "tombstone_revision_null_zero_false_authority": "PASS",
+    "secrets_excluded": "PASS",
+    "nonfresh_rejected": "PASS",
+    "production_hard_deny": "PASS"
+  },
+  "cleanup": {
+    "f5a752fe-ffe7-4b6a-8288-634d8644624d": "DELETED",
+    "c6c90cbb-7905-451a-bdca-4b3a6aa7048a": "DELETED"
+  },
+  "status": "REMOTE_PASS",
+  "auth": "PASS",
+  "auth_type": "OAuth",
+  "temporary_token_created": false,
+  "cleanup_verified": [
+    "f5a752fe-ffe7-4b6a-8288-634d8644624d",
+    "c6c90cbb-7905-451a-bdca-4b3a6aa7048a"
+  ],
+  "snapshot_guarantee": "Two complete consecutive captures compared exactly with counts, schema/FK and collection/global hashes; observable changes or truncation rejected. No global transaction; ABA changes not detected.",
+  "production_untouched": true,
+  "production_metadata_note": "Account listing only; zero production content reads or writes.",
+  "head": "7982b64d288dd7bbc1dbee351e2ede0203bb7d30",
+  "state": "REMOTE_CERTIFIED_READY_FOR_PROMOTION",
+  "production_rejected_before_remote_call": true,
+  "backup_verify": "PASS",
+  "hashes": "PASS",
+  "migrations_by_database": {
+    "source": "8/8 PASS",
+    "target": "8/8 PASS"
+  },
+  "invariants": {
+    "tombstone": "PASS",
+    "revision": "PASS",
+    "null": "PASS",
+    "zero": "PASS",
+    "false": "PASS",
+    "FK": "PASS",
+    "authority": "PASS"
+  },
+  "branch": "backup-backend-reconcile-certified-runtime",
+  "main_merge": false,
+  "next_step": "Review and authorize promotion separately; no merge or deployment performed.",
+  "remote_call_count": 387
+}

@@ -6,9 +6,21 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
   await page.goto(urlIndexHtml());
 
-  const out = await page.evaluate(() => {
+  const out = await page.evaluate(async () => {
     var res = [];
     function assert(cond, msg){ res.push((cond?'✅ ':'❌ FALLO: ')+msg); }
+    // Wait for the async repository write to finish at the form-close boundary.
+    function submitGuardado(id){
+      var form = document.getElementById(id);
+      return new Promise(function(resolve, reject){
+        var timer = setTimeout(function(){ observer.disconnect(); reject(new Error('save did not complete')); }, 5000);
+        var observer = new MutationObserver(function(){
+          if(form.classList.contains('form-oculto')){ clearTimeout(timer); observer.disconnect(); resolve(); }
+        });
+        observer.observe(form, {attributes:true, attributeFilter:['class']});
+        form.dispatchEvent(new Event('submit', {cancelable:true}));
+      });
+    }
     var tarifa = { valle:0.10, llano:0.20, punta:0.30 };
 
     /* ---------- Punto 7: precio medio de una sesión que cruza periodos ---------- */
@@ -41,7 +53,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     document.getElementById('fc-perdidas').value = '10'; // 10% de pérdidas
     document.getElementById('fc-origen-solar').value = '30';
     document.getElementById('fc-origen-bateria').value = '20';
-    document.getElementById('form-carga').dispatchEvent(new Event('submit', {cancelable:true}));
+    await submitGuardado('form-carga');
 
     var c = DATOS.cargas[0];
     assert(!!c, 'la carga con pérdidas y origen de energía se ha guardado');
@@ -60,7 +72,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     document.getElementById('fc-tipo').value = 'domestica';
     document.getElementById('fc-kwh').value = '10';
     document.getElementById('fc-precio').value = '0.15';
-    document.getElementById('form-carga').dispatchEvent(new Event('submit', {cancelable:true}));
+    await submitGuardado('form-carga');
     var c2 = DATOS.cargas[0];
     assert(c2.perdidas_pct === null, 'sin pérdidas indicadas, perdidas_pct queda en null, no en 0 inventado');
     assert(c2.origen_energia === null, 'sin datos de origen, origen_energia queda en null — no se inventa procedencia (punto 8)');
@@ -78,7 +90,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     document.getElementById('fc-kwh').value = '10';
     document.getElementById('fc-precio').value = '0.15';
     document.getElementById('fc-origen-solar').value = '50';
-    document.getElementById('form-carga').dispatchEvent(new Event('submit', {cancelable:true}));
+    await submitGuardado('form-carga');
     assert(DATOS.cargas[0].origen_energia === null, 'con el flag solar_tracking desactivado, no se guarda atribución de origen aunque el campo tuviera un valor');
 
     /* ---------- Punto 9: plantillas de viajes ---------- */
@@ -91,7 +103,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     document.getElementById('fp-destino').value = 'Oviedo FFPA';
     document.getElementById('fp-etiqueta').value = 'trabajo';
     document.getElementById('fp-km').value = '30';
-    document.getElementById('form-plantilla').dispatchEvent(new Event('submit', {cancelable:true}));
+    await submitGuardado('form-plantilla');
     assert(DATOS.plantillas_viaje.length === 1, 'la plantilla de viaje se ha guardado');
 
     var btnUsar = document.querySelector('[data-usar-plantilla]');

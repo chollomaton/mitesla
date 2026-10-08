@@ -1,6 +1,7 @@
 // Arnés de pruebas para worker.js: KV en memoria + fetch de Tesla simulado.
 import workerModule from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { createHash } from 'node:crypto';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -26,7 +27,11 @@ function kvEnMemoria() {
 }
 
 function envBase() {
+  const DB=crearMockD1();
+  const SESSION_TOKEN='s'.repeat(43);
+  DB._sql.prepare('INSERT INTO sessions(id,token_hash,created_at,expires_at) VALUES(?,?,?,?)').run('test-session',createHash('sha256').update(SESSION_TOKEN).digest('hex'),Date.now(),Date.now()+86400000);
   return {
+    SESSION_TOKEN,
     TESLA_CLIENT_ID: 'cid',
     TESLA_CLIENT_SECRET: 'secret',
     TESLA_REDIRECT_URI: 'https://api.laperestronika.com/callback',
@@ -35,14 +40,14 @@ function envBase() {
     ALLOWED_ORIGIN: 'https://chollomaton.github.io',
     ADMIN_TOKEN: 'admin-secreto-123',
     TESLA_TOKENS: kvEnMemoria(),
-    DB: crearMockD1()
+    DB
   };
 }
 
 // A11 (FASE A): /oauth/start ya no acepta ?key=ADMIN_TOKEN — el flujo real es
 // POST /oauth/start-token (autenticado por cabecera) -> GET /oauth/start?token=<token de un solo uso>.
 async function iniciarOauthStart(env) {
-  const resToken = await workerModule.fetch(req('/oauth/start-token', { method: 'POST', headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+  const resToken = await workerModule.fetch(req('/oauth/start-token', { method: 'POST', headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
   const bodyToken = await resToken.json();
   return workerModule.fetch(req('/oauth/start?token=' + bodyToken.token), env);
 }
@@ -76,16 +81,16 @@ async function run() {
   // ---- 3) Endpoint privado con token correcto -> 200 ----
   {
     const env = envBase();
-    const res = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const res = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     assert(res.status === 200, '/estado con token correcto -> 200');
   }
 
   // ---- 4) CORS: origen permitido refleja Origin; origen no permitido no manda ACAO ----
   {
     const env = envBase();
-    const res1 = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer admin-secreto-123', Origin: 'https://chollomaton.github.io' } }), env);
+    const res1 = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, Origin: 'https://chollomaton.github.io' } }), env);
     assert(res1.headers.get('Access-Control-Allow-Origin') === 'https://chollomaton.github.io', 'CORS refleja origen permitido');
-    const res2 = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer admin-secreto-123', Origin: 'https://malicioso.com' } }), env);
+    const res2 = await workerModule.fetch(req('/estado', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, Origin: 'https://malicioso.com' } }), env);
     assert(!res2.headers.get('Access-Control-Allow-Origin'), 'CORS no manda ACAO para origen no permitido (nunca "*")');
   }
 
@@ -115,7 +120,7 @@ async function run() {
     const guardado = await env.TESLA_TOKENS.get('oauth_state:' + state);
     assert(guardado === '1', 'el state generado se guarda en KV');
 
-    const resTokenViejo = await workerModule.fetch(req('/oauth/start-token', { method: 'POST', headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const resTokenViejo = await workerModule.fetch(req('/oauth/start-token', { method: 'POST', headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     const tokenNuevo = (await resTokenViejo.json()).token;
     const resSegundoUso = await workerModule.fetch(req('/oauth/start?token=' + tokenNuevo), env);
     assert(resSegundoUso.status === 302, 'un token de un solo uso recién emitido y sin usar sí funciona');
@@ -162,7 +167,7 @@ async function run() {
   // ---- 9) /vehiculo sin conexión -> not_connected 401 ----
   {
     const env = envBase();
-    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     const body = await res.json();
     assert(res.status === 401 && body.error === 'not_connected', '/vehiculo sin conexión -> 401 not_connected (no expone detalle interno)');
   }
@@ -184,7 +189,7 @@ async function run() {
       }
       throw new Error('URL no esperada: ' + u);
     };
-    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     assert(res.status === 200, '/vehiculo con 1 coche -> 200');
     const vinGuardado = await env.TESLA_TOKENS.get('selected_vin');
     assert(vinGuardado === 'VIN12345678901234', 'selected_vin se guarda automáticamente con un solo vehículo');
@@ -203,7 +208,7 @@ async function run() {
       }
       throw new Error('no debería llamar a vehicle_data sin selección');
     };
-    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const res = await workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     const body = await res.json();
     assert(res.status === 300 && body.error === 'seleccion_requerida' && body.vehiculos.length === 2, 'varios vehículos sin selección -> 300 seleccion_requerida con la lista');
   }
@@ -217,7 +222,7 @@ async function run() {
       await env.TESLA_TOKENS.put('access_token', 'AT1');
       await env.TESLA_TOKENS.put('access_token_exp', String(Date.now() + 3600000));
       global.fetch = async () => new Response('SECRETO_INTERNO_DE_TESLA_QUE_NO_DEBE_VERSE', { status });
-      const res = await workerModule.fetch(req('/vehiculos', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+      const res = await workerModule.fetch(req('/vehiculos', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
       const txt = await res.text();
       assert(txt.indexOf('SECRETO_INTERNO_DE_TESLA_QUE_NO_DEBE_VERSE') === -1, 'error ' + status + ': no filtra el cuerpo real de Tesla');
       const body = JSON.parse(txt);
@@ -247,8 +252,8 @@ async function run() {
       throw new Error('inesperado ' + u);
     };
     await Promise.all([
-      workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env),
-      workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer admin-secreto-123' } }), env)
+      workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env),
+      workerModule.fetch(req('/vehiculo', { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env)
     ]);
     assert(llamadasRefresh === 1, 'dos peticiones simultáneas sin token válido -> un único refresh contra Tesla (lock funciona), fue: ' + llamadasRefresh);
   }
@@ -258,7 +263,7 @@ async function run() {
     const env = envBase();
     await env.TESLA_TOKENS.put('refresh_token', 'RT1');
     await env.TESLA_TOKENS.put('access_token', 'AT1');
-    const res = await workerModule.fetch(req('/desconectar', { method: 'POST', headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    const res = await workerModule.fetch(req('/desconectar', { method: 'POST', headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     assert(res.status === 200, '/desconectar -> 200');
     assert(!(await env.TESLA_TOKENS.get('refresh_token')), '/desconectar borra refresh_token');
   }

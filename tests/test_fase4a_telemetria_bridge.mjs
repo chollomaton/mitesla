@@ -3,7 +3,8 @@
 // genérico): basta para probar de verdad la lógica de firma, idempotencia y no-regresión temporal
 // sin depender de una base D1 real.
 import workerModule from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { createHash } from 'node:crypto';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -32,7 +33,9 @@ function mockDB() {
 }
 
 function envBase(db) {
-  return {
+  const SESSION_TOKEN='s'.repeat(43);
+  if(db)db._sql.prepare('INSERT OR IGNORE INTO sessions(id,token_hash,created_at,expires_at) VALUES(?,?,?,?)').run('test-session',createHash('sha256').update(SESSION_TOKEN).digest('hex'),Date.now(),Date.now()+86400000);
+  return { SESSION_TOKEN,
     ALLOWED_ORIGIN: 'https://chollomaton.github.io',
     ADMIN_TOKEN: 'admin-secreto-123',
     TELEMETRY_BRIDGE_SECRET: 'bridge-secreto-xyz',
@@ -188,7 +191,7 @@ async function run() {
   // ---- 11) /internal/health autenticado -> refleja el estado real guardado ----
   {
     const res = await workerModule.fetch(new Request('https://api.laperestronika.com/internal/health?vin=' + VIN, {
-      headers: { Authorization: 'Bearer ' + envCompartido.ADMIN_TOKEN }
+      headers: { Authorization: 'Bearer ' + envCompartido.SESSION_TOKEN }
     }), envCompartido);
     const body = await res.json();
     assert(res.status === 200 && body.d1_configurado === true && body.secreto_bridge_configurado === true, '/internal/health autenticado -> informa de D1 y secreto configurados');
@@ -199,7 +202,7 @@ async function run() {
   // ---- 12) /internal/health para un VIN sin ningún dato -> no inventa sync_state ----
   {
     const res = await workerModule.fetch(new Request('https://api.laperestronika.com/internal/health?vin=VIN-INEXISTENTE', {
-      headers: { Authorization: 'Bearer ' + envCompartido.ADMIN_TOKEN }
+      headers: { Authorization: 'Bearer ' + envCompartido.SESSION_TOKEN }
     }), envCompartido);
     const body = await res.json();
     assert(res.status === 200 && body.sync_state === null, 'VIN sin telemetría todavía -> sync_state null, nunca datos simulados');

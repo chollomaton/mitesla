@@ -47,7 +47,7 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     function assert(cond, msg){ res.push((cond?'✅ ':'❌ FALLO: ')+msg); }
 
     DATOS.vehiculo.tesla_vin = '5YJ3E1EA1PF000001';
-    guardarConfigTesla({ backendUrl: 'https://api.prueba.local', adminKey: 'clave-de-prueba' });
+    guardarConfigTesla({ backendUrl: 'https://api.prueba.local', sessionToken: 'sesion-de-prueba' });
 
     var pendientesSimulados = [
       { id: 'pend-1', tipo: 'clasificar_viaje', referencia_tabla: 'trips', referencia_id: 'trip-1', detalle: { started_at: '2026-09-20T08:00:00.000Z', distance_km: 12 } },
@@ -55,9 +55,12 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     ];
     var alertasSimuladas = [ { id: 'alert-1', rule: 'silencio_telemetria', severity: 'accion', mensaje: 'Sin datos desde hace 8 horas.' } ];
     var llamadasResolver = [];
+    var sessionAuthCorrecta = true;
 
     var fetchOriginal = window.fetch;
     window.fetch = function(url, opts){
+      sessionAuthCorrecta = sessionAuthCorrecta && opts.headers.Authorization === 'Bearer sesion-de-prueba';
+      if(String(url).indexOf('/automatizacion/')!==-1 || String(url).indexOf('/reglas')!==-1) return Promise.resolve({ok:true, status:200, json:async () => ({})});
       if(String(url).indexOf('/internal/health')!==-1) return Promise.resolve({ ok:true, status:200, json: async () => ({ d1_configurado:true, secreto_bridge_configurado:true, sync_state:{eventos_recibidos_mes:5}, minutos_desde_ultimo_evento:3, posible_problema:false }) });
       if(String(url).indexOf('/pendientes/resolver')!==-1){ llamadasResolver.push(JSON.parse(opts.body)); return Promise.resolve({ ok:true, status:200, json: async () => ({ ok:true }) }); }
       if(String(url).indexOf('/pendientes')!==-1) return Promise.resolve({ ok:true, status:200, json: async () => ({ pendientes: llamadasResolver.length ? pendientesSimulados.filter(p=>p.id!==llamadasResolver[0].id) : pendientesSimulados }) });
@@ -79,6 +82,8 @@ const { lanzarChromium, urlIndexHtml, PROJECT_ROOT } = require('./helpers/browse
     await new Promise(r => setTimeout(r, 50));
     assert(llamadasResolver.length === 1 && llamadasResolver[0].id === 'pend-1' && llamadasResolver[0].resuelto_con.classification === 'trabajo', 'pulsar "Trabajo" llama a /pendientes/resolver con el id correcto y classification:"trabajo"');
 
+    assert(sessionAuthCorrecta, 'las llamadas de automatización usan el token de sesión');
+    assert(!localStorage.getItem('mitesla-tesla-config').includes('sesion-de-prueba'), 'el token de sesión no se persiste en localStorage');
     window.fetch = fetchOriginal;
     return { res: res };
   });
