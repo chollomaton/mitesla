@@ -4,7 +4,8 @@
 import workerModule, {
   emparejarEventosEnCargas, calcularCosteConReglas, construirCargaDesdeEventos
 } from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { createHash } from 'node:crypto';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -86,6 +87,8 @@ async function pruebasAsincronas() {
   const env = { ALLOWED_ORIGIN: 'https://chollomaton.github.io', ADMIN_TOKEN: 'admin-secreto-123', TELEMETRY_BRIDGE_SECRET: 'bridge-secreto', TESLA_TOKENS: kvEnMemoria(), DB: db };
   // FASE A (A14/A10): el VIN debe estar autorizado y en modo != 'off' para que /internal/telemetry
   // procese cargas reales — igual que haría /seleccionar-vehiculo + el panel "Automatización".
+  env.SESSION_TOKEN='s'.repeat(43);
+  db._sql.prepare('INSERT INTO sessions(id,token_hash,created_at,expires_at) VALUES(?,?,?,?)').run('test-session',createHash('sha256').update(env.SESSION_TOKEN).digest('hex'),Date.now(),Date.now()+86400000);
   db._autorizarYActivar(VIN, 'active');
 
   await enviar(env, { vin: VIN, events: [{ id: 'ev-c-start', tipo: 'charge_started', observado_en: '2026-09-20T22:00:00.000Z', payload: { estado_carga: 'Charging', lat: 43.3619, lng: -5.8494, soc_pct: 40, ac_energy_kwh: 0 } }] });
@@ -120,7 +123,7 @@ async function pruebasAsincronas() {
   // Resolver el pendiente de precio a mano.
   const pendienteCarga = Array.from(dump3.pendingActions.values())[0];
   res = await workerModule.fetch(new Request('https://api.laperestronika.com/pendientes/resolver', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + env.ADMIN_TOKEN, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: pendienteCarga.id, resuelto_con: { total_cost: 9.5 } })
   }), env);
   body = await res.json();

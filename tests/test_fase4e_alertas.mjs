@@ -3,7 +3,8 @@
 import workerModule, {
   generarAlertaSiProcede, comprobarHuecoOdometro, comprobarSilencioTelemetria, ejecutarComprobacionesDeSalud
 } from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { createHash } from 'node:crypto';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -17,6 +18,7 @@ async function pruebasAsincronas() {
   // ---- generarAlertaSiProcede: dedupe/cooldown real ----
   {
     const db = crearMockD1();
+    db._autorizarYActivar(VIN);
     const env = { DB: db };
     const creada1 = await generarAlertaSiProcede(env, VIN, 'regla_x', 'clave_x', 'accion', 'primer aviso', 24);
     assert(creada1 === true, 'la primera vez que salta una condición, se crea la alerta');
@@ -29,6 +31,7 @@ async function pruebasAsincronas() {
   // ---- comprobarHuecoOdometro: solo alerta si el hueco es real y significativo ----
   {
     const db = crearMockD1();
+    db._autorizarYActivar(VIN);
     const env = { DB: db };
     await db.prepare('INSERT INTO vehicles (vin, creado_en, actualizado_en) VALUES (?, ?, ?) ON CONFLICT(vin) DO UPDATE SET actualizado_en=excluded.actualizado_en').bind(VIN, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z').run();
     await db.prepare('INSERT INTO vehicle_snapshots (vin, soc_pct, autonomia_km, odometro_km, estado, lat, lng, ubicacion_nombre, temperatura_exterior, potencia_carga_kw, tiempo_restante_carga_min, fuente, observado_en, recibido_en) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -42,6 +45,7 @@ async function pruebasAsincronas() {
 
     // Añadimos un viaje que explica casi todo el hueco -> ya no debería alertar de nuevo (y ni siquiera hace falta, por cooldown).
     const db2 = crearMockD1();
+    db2._autorizarYActivar(VIN);
     const env2 = { DB: db2 };
     await db2.prepare('INSERT INTO vehicles (vin, creado_en, actualizado_en) VALUES (?, ?, ?) ON CONFLICT(vin) DO UPDATE SET actualizado_en=excluded.actualizado_en').bind(VIN, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z').run();
     await db2.prepare('INSERT INTO vehicle_snapshots (vin, soc_pct, autonomia_km, odometro_km, estado, lat, lng, ubicacion_nombre, temperatura_exterior, potencia_carga_kw, tiempo_restante_carga_min, fuente, observado_en, recibido_en) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -58,6 +62,7 @@ async function pruebasAsincronas() {
   // ---- comprobarSilencioTelemetria ----
   {
     const db = crearMockD1();
+    db._autorizarYActivar(VIN);
     const env = { DB: db };
     await db.prepare('INSERT INTO vehicles (vin, creado_en, actualizado_en) VALUES (?, ?, ?) ON CONFLICT(vin) DO UPDATE SET actualizado_en=excluded.actualizado_en').bind(VIN, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z').run();
     await db.prepare('INSERT INTO sync_state (vin, telemetria_activa, eventos_recibidos_mes, vehicle_data_calls_mes, wakes_mes, errores_mes, mes_referencia, actualizado_en, ultimo_evento_en) VALUES (?,1,?,?,?,?,?,?,?)')
@@ -66,6 +71,7 @@ async function pruebasAsincronas() {
     assert(alerto === true, 'más de 6 horas sin telemetría genera una alerta real');
 
     const db2 = crearMockD1();
+    db2._autorizarYActivar(VIN);
     const env2 = { DB: db2 };
     await db2.prepare('INSERT INTO vehicles (vin, creado_en, actualizado_en) VALUES (?, ?, ?) ON CONFLICT(vin) DO UPDATE SET actualizado_en=excluded.actualizado_en').bind(VIN, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z').run();
     await db2.prepare('INSERT INTO sync_state (vin, telemetria_activa, eventos_recibidos_mes, vehicle_data_calls_mes, wakes_mes, errores_mes, mes_referencia, actualizado_en, ultimo_evento_en) VALUES (?,1,?,?,?,?,?,?,?)')
@@ -77,6 +83,7 @@ async function pruebasAsincronas() {
   // ---- ejecutarComprobacionesDeSalud: recorre todos los vehículos conocidos ----
   {
     const db = crearMockD1();
+    db._autorizarYActivar(VIN);
     const env = { DB: db };
     await db.prepare('INSERT INTO vehicles (vin, creado_en, actualizado_en) VALUES (?, ?, ?) ON CONFLICT(vin) DO UPDATE SET actualizado_en=excluded.actualizado_en').bind(VIN, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z').run();
     await db.prepare('INSERT INTO sync_state (vin, telemetria_activa, eventos_recibidos_mes, vehicle_data_calls_mes, wakes_mes, errores_mes, mes_referencia, actualizado_en, ultimo_evento_en) VALUES (?,1,?,?,?,?,?,?,?)')
@@ -88,23 +95,26 @@ async function pruebasAsincronas() {
   // ---- /alertas GET y /alertas/resolver, end-to-end a través del Worker real ----
   {
     const db = crearMockD1();
+    db._autorizarYActivar(VIN);
     const env = { ALLOWED_ORIGIN: 'https://chollomaton.github.io', ADMIN_TOKEN: 'admin-secreto-123', DB: db };
+    env.SESSION_TOKEN='s'.repeat(43);
+    db._sql.prepare('INSERT INTO sessions(id,token_hash,created_at,expires_at) VALUES(?,?,?,?)').run('test-session',createHash('sha256').update(env.SESSION_TOKEN).digest('hex'),Date.now(),Date.now()+86400000);
     await generarAlertaSiProcede(env, VIN, 'regla_y', 'clave_y', 'critica', 'algo importante', 24);
 
     let res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas?vin=' + VIN), env); // sin auth
     assert(res.status === 401, 'GET /alertas sin autenticar -> 401');
 
-    res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas?vin=' + VIN, { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas?vin=' + VIN, { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     let body = await res.json();
     assert(res.status === 200 && body.alertas.length === 1 && body.alertas[0].severity === 'critica', 'GET /alertas devuelve la alerta real, con su severidad');
 
     const idAlerta = body.alertas[0].id;
     res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas/resolver', {
-      method: 'POST', headers: { Authorization: 'Bearer admin-secreto-123', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: idAlerta })
+      method: 'POST', headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: idAlerta })
     }), env);
     assert(res.status === 200, 'POST /alertas/resolver marca la alerta como resuelta');
 
-    res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas?vin=' + VIN, { headers: { Authorization: 'Bearer admin-secreto-123' } }), env);
+    res = await workerModule.fetch(new Request('https://api.laperestronika.com/alertas?vin=' + VIN, { headers: { Authorization: 'Bearer ' + env.SESSION_TOKEN } }), env);
     body = await res.json();
     assert(body.alertas.length === 0, 'una vez resuelta, la alerta ya no aparece en la lista de abiertas');
   }

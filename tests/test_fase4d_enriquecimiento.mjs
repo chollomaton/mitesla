@@ -4,7 +4,7 @@
 import workerModule, {
   extraerNombreLugar, extraerResumenClima, construirUrlNominatim, construirUrlOpenMeteo, enriquecerViajesPendientes
 } from '../worker.js';
-import { crearMockD1 } from './helpers/mock_d1.js';
+import { crearMockD1 } from './helpers/sqlite_d1.js';
 
 let fallos = 0;
 function assert(cond, msg) {
@@ -39,13 +39,15 @@ function assert(cond, msg) {
 
 // ---- enriquecerViajesPendientes: orquestación completa con red simulada ----
 async function pruebasAsincronas() {
+  const VIN = '5YJ3E1EA1PF000001';
   const db = crearMockD1();
+    db._autorizarYActivar(VIN);
   const env = { DB: db };
 
   // Sembramos dos viajes ya cerrados directamente en D1 (como los dejaría la Fase 4B).
   // Coordenadas de inicio y fin DISTINTAS entre sí (y entre ambos viajes) para poder distinguir,
   // con la caché por coordenada de B19 activa, cuántas llamadas reales a Nominatim se hacen.
-  const VIN = '5YJ3E1EA1PF000001';
+
   function sembrarViaje(id, latIni, lngIni, latFin, lngFin, startedAt, startLocId, endLocId) {
     return db.prepare(
       'INSERT INTO trips (id, vin, started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, duration_min, ' +
@@ -87,6 +89,7 @@ async function pruebasAsincronas() {
 
   // Un fallo de red en un viaje no debe tirar el resto del lote.
   const db2 = crearMockD1();
+    db2._autorizarYActivar(VIN);
   const env2 = { DB: db2 };
   await db2.prepare(
     'INSERT INTO trips (id, vin, started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, duration_min, ' +
@@ -103,6 +106,7 @@ async function pruebasAsincronas() {
   // Nominatim para ese punto: usa directamente el nombre del lugar guardado en D1. ----
   {
     const db3 = crearMockD1();
+    db3._autorizarYActivar(VIN);
     const env3 = { DB: db3 };
     db3._sembrarLocation({ id: 'loc-casa', vin: VIN, name: 'Casa', lat: 43.3619, lng: -5.8494, radius_m: 100, created_at: '2026-01-01', updated_at: '2026-01-01' });
     db3._sembrarLocation({ id: 'loc-trabajo', vin: VIN, name: 'Federación (Trabajo)', lat: 43.3700, lng: -5.8300, radius_m: 100, created_at: '2026-01-01', updated_at: '2026-01-01' });
@@ -128,6 +132,7 @@ async function pruebasAsincronas() {
   // solo deben generar UNA llamada real a Nominatim entre ambos, no una por cada punto. ----
   {
     const db4 = crearMockD1();
+    db4._autorizarYActivar(VIN);
     const env4 = { DB: db4 };
     function sembrar(id, lat, lng, startedAt) {
       return db4.prepare(
@@ -153,6 +158,7 @@ async function pruebasAsincronas() {
   // ---- B19/B20: timeout por petición — una respuesta que nunca llega no debe colgar el job. ----
   {
     const db5 = crearMockD1();
+    db5._autorizarYActivar(VIN);
     const env5 = { DB: db5 };
     await db5.prepare(
       'INSERT INTO trips (id, vin, started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, duration_min, ' +
