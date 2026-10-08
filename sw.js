@@ -1,10 +1,10 @@
 /* Service Worker de Mi Tesla — Fase 2 (punto 20-23 de la auditoría).
  *
- * IMPORTANTE: CACHE_VERSION debe subirse a la vez que APP_VERSION en index.html
+ * IMPORTANTE: CACHE_VERSION debe subirse a la vez que APP_VERSION en app.js
  * en cada despliegue con cambios de assets. Vincula el nombre de la caché a la
  * versión real de la app en vez de dejar un 'mitesla-v1' eterno (punto 21).
  */
-var CACHE_VERSION = '2026.09.20-r3';
+var CACHE_VERSION = '2026.10.07-micro-aa';
 var CACHE_ESTATICA = 'mitesla-estatica-' + CACHE_VERSION;
 
 /* App shell mínimo: solo lo verdaderamente estático. datos.json (si existiera) y
@@ -52,7 +52,10 @@ function esNavegacion(request){
 function esApi(url){
   // Cualquier origen distinto al de la propia app (Tesla, GitHub, Open-Meteo, Open Charge Map, etc.)
   // y cualquier ruta local que sea claramente datos privados del usuario: nunca se cachean (punto 20).
-  return url.origin !== self.location.origin || /datos\.json$/.test(url.pathname);
+  var shellBase = new URL('./', self.location.href || self.location.origin+'/sw.js').pathname;
+  return url.origin !== self.location.origin || /datos\.json$/.test(url.pathname) ||
+    /^\/(canonical|d1|auth|internal|pendientes|alertas|telemetry|telemetria|estado|vehicle_data|vehiculo|vehiculos|oauth|callback|push|lugares|reglas|automatizacion|backup|seleccionar-vehiculo|setup|desconectar)(?:\/|$)/.test(url.pathname) ||
+    (!esAssetEstatico(url) && url.pathname !== shellBase && url.pathname !== shellBase+'index.html');
 }
 function esAssetEstatico(url){
   return url.origin === self.location.origin && /\.(png|jpg|jpeg|svg|webp|ico|css|js|webmanifest|woff2?)$/i.test(url.pathname);
@@ -128,12 +131,12 @@ self.addEventListener('notificationclick', function(e){
   );
 });
 
-/* Fase 3, punto 19: Web Push real — backend → Push API → Service Worker.
- * ESTADO: PENDIENTE de un backend que realmente envíe pushes (necesita claves VAPID propias y un
- * servidor que llame al endpoint de push del navegador con el payload). Este listener es el código
- * real del lado del Service Worker que consumiría esos envíos — ya funciona tal cual en cuanto
- * exista ese backend, pero hasta entonces nunca se dispara porque nadie manda ningún push. No
- * rompe nada si no está configurado: sin backend, este evento simplemente no ocurre nunca. */
+/* Fase 3 / B16, punto 19: Web Push real — backend → Push API → Service Worker. Desde B16 el
+ * backend (worker.js: enviarPushesAlertasPendientes, por Cron Trigger) firma cada push con VAPID
+ * real y cifra el payload (RFC 8291), así que este listener ya recibe pushes de verdad en cuanto
+ * el dispositivo está suscrito (ver activarWebPush en app.js) y hay una alerta que avisar. payload
+ * lleva {title, body, seccion, categoria} — seccion es a dónde navega notificationclick (más abajo)
+ * al pulsar la notificación, y categoria es el tag con el que el propio navegador deduplica. */
 self.addEventListener('push', function(e){
   var payload = { title:'Mi Tesla', body:'' };
   try{ if(e.data) payload = Object.assign(payload, e.data.json()); }catch(err){}

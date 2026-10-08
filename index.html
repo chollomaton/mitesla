@@ -2,23 +2,35 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<!-- Punto 5 de la auditoría (Fase 2): CSP estricta.
+<!-- Punto 5 de la auditoría (Fase 2) + C2 (FASE C, auditoría de seguridad frontend): CSP estricta.
      script-src: 'self' + el hash del único <script> inline que queda (theme-color pre-pintado,
      debe ejecutarse síncrono en <head> antes del primer paint, por eso no se externaliza). Todo
-     el resto del JS vive en app.js, servido desde el propio origen — sin 'unsafe-inline'.
-     style-src: sigue necesitando 'unsafe-inline' porque hay ~145 atributos style="" en el marcado;
-     eliminarlos es un trabajo de extracción de CSS más amplio, pendiente (no es parte de esta fase).
-     connect-src: 'self' + https: en general, porque la URL del backend Tesla (Cloudflare Worker)
-     es configurable por el usuario en Ajustes (dominio arbitrario) — no se puede fijar una lista
-     cerrada sin romper esa función; api.github.com/api.open-meteo.com/api.openchargemap.io quedan
-     cubiertas por ese mismo https:.
+     el resto del JS vive en app.js, servido desde el propio origen — sin 'unsafe-inline', sin
+     'unsafe-eval' (no hay eval()/new Function()/setTimeout con string en ningún archivo del
+     proyecto — comprobado, no supuesto).
+     style-src: sigue necesitando 'unsafe-inline' porque hay ~145 atributos style="" en el marcado
+     (sobre todo estilos calculados en JS: barras de progreso, colores de estado…). Extraerlos a
+     clases CSS es un trabajo de refactor más amplio — queda para C5/C6 (modularización/rediseño),
+     que van a tocar ese mismo CSS de todos modos; hacerlo aquí sería un parche sin la vista de
+     conjunto que pide esa fase. Es el ÚNICO "unsafe-*" que queda en toda la CSP, documentado y con
+     fecha de cierre, no un cajón de sastre.
+     connect-src: C2 corrige el hallazgo real de la auditoría — antes era 'self' https: (CUALQUIER
+     origen HTTPS), lo que anulaba buena parte del sentido de tener una CSP. Se sustituye por una
+     lista blanca explícita y cerrada: api.github.com (copia de seguridad/sincronización, B25),
+     api.open-meteo.com (clima del viaje) y api.openchargemap.io (cargadores públicos en el mapa)
+     son fijos; TESLA_CONFIG_POR_DEFECTO.backendUrl (app.js) es el backend real desplegado — SI
+     ESE DOMINIO CAMBIA, hay que actualizarlo aquí Y en _headers a la vez, o el backend dejará de
+     poder contactarse (la consola del navegador lo dirá con un error de CSP explícito, nunca en
+     silencio). No hay forma de aceptar "el dominio que el usuario escriba en Ajustes" sin volver a
+     una lista abierta — esta app es de un único usuario/despliegue, así que se fija el dominio real
+     en vez de dejar la puerta abierta a cualquier https:.
      Nota GitHub Pages vs Cloudflare Pages: GitHub Pages no permite configurar cabeceras HTTP
      propias, así que esta <meta> es la ÚNICA CSP que llega a aplicarse ahí — y una <meta> CSP no
      soporta frame-ancestors ni report-uri/report-to (el navegador los ignora si se ponen aquí).
      Si se despliega en Cloudflare Pages, usar además el archivo _headers (incluido en este
      proyecto), que sí aplica frame-ancestors 'none' y X-Content-Type-Options/X-Frame-Options,
      y que Cloudflare procesa en la respuesta real del servidor. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-tHrrsy23CVJ+3+XdVyoLM0jRx5leuEYcLfGEQV4fPk8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-tHrrsy23CVJ+3+XdVyoLM0jRx5leuEYcLfGEQV4fPk8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self' https://api.github.com https://api.open-meteo.com https://api.openchargemap.io https://api.laperestronika.com; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -260,6 +272,7 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.02em}
 .btn-primario,.btn-secundario{flex:1;padding:12px;border-radius:12px;font-size:14.5px;font-weight:650;text-align:center}
 .btn-primario{background:linear-gradient(135deg,#2a9bff,var(--acc2));color:#fff;box-shadow:0 3px 10px rgba(10,132,255,.32)}
 .btn-secundario{background:var(--fill);color:var(--txt2)}
+.btn-confirmar-peligro{background:var(--acc)!important;color:#fff!important}
 .btn-secundario.activo{background:var(--acc2);color:#fff}
 .input-inline{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:6px 8px;
   font-size:16px;font-weight:600;color:var(--txt);font-family:inherit}
@@ -547,6 +560,28 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
     <input type="text" id="buscar-cargas" placeholder="Buscar por lugar…">
   </div>
 
+  <div class="sec" id="sec-cargas-auto">
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="rayo"></span><div><h2>Detectadas automáticamente (Tesla)</h2><div class="sec-sub" id="cargas-auto-estado">B6 — cargas detectadas por telemetría, todavía no importadas al historial de abajo</div></div></div></div>
+    <div class="lista" id="lista-cargas-auto"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="rayo"></span><div><h2>Reconciliar factura de Supercharger</h2><div class="sec-sub">B13 — vincula una factura real a la carga automática correspondiente</div></div></div><button type="button" class="ver" id="btn-factura-toggle">Reconciliar</button></div>
+    <form class="lista form-oculto" id="form-factura" style="margin-bottom:12px" novalidate>
+      <div style="padding:16px" class="form-grid">
+        <label>Fecha/hora de la factura<input type="datetime-local" id="fac-fecha" required></label>
+        <label>Importe (€)<input type="number" step="0.01" min="0.01" id="fac-importe" required inputmode="decimal"></label>
+        <label>kWh según factura (opcional, ayuda a afinar)<input type="number" step="0.1" min="0" id="fac-kwh" inputmode="decimal"></label>
+        <label>Nº de factura (opcional)<input type="text" id="fac-numero" autocomplete="off"></label>
+        <div class="form-acciones">
+          <button class="btn-secundario" type="button" id="fac-cancelar">Cancelar</button>
+          <button class="btn-primario" type="submit" id="fac-buscar">Buscar cargas candidatas</button>
+        </div>
+      </div>
+    </form>
+    <div class="lista" id="lista-candidatas-factura" style="display:none;margin-bottom:12px"></div>
+  </div>
+
   <div class="sec">
     <div class="sec-h"><h2>Historial</h2><button type="button" class="ver" id="btn-add-carga">+ Añadir</button></div>
 
@@ -584,6 +619,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
           </select>
         </label>
         <label>Fin de sesión (opcional)<input type="datetime-local" id="fc-fecha-fin"></label>
+        <!-- B12 (FASE B): reparto de coste por tramo horario. Solo aparece para cargas de tipo
+             "Casa" con fecha de fin y kWh conocidos — precioMedioSesion ya calculaba un precio
+             medio ponderado cuando la sesión cruza de tramo, pero nunca se mostraba el desglose. -->
+        <div id="fc-desglose-tramos" style="grid-column:1/-1"></div>
         <label>Pérdidas de carga % (opcional)<input type="number" step="0.1" min="0" max="50" id="fc-perdidas" inputmode="decimal"></label>
         <label>Origen solar % (opcional, solo Casa)<input type="number" step="1" min="0" max="100" id="fc-origen-solar" inputmode="numeric"></label>
         <label>Origen batería doméstica % (opcional, solo Casa)<input type="number" step="1" min="0" max="100" id="fc-origen-bateria" inputmode="numeric"></label>
@@ -627,6 +666,11 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
       <button class="btn-primario" id="btn-informe-trabajo" style="flex:none;padding:10px 18px">Generar informe PDF</button>
       <button class="btn-secundario" id="btn-informe-trabajo-csv" style="flex:none;padding:10px 18px">Exportar CSV</button>
     </div>
+  </div>
+
+  <div class="sec" id="sec-viajes-auto">
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="ruta"></span><div><h2>Detectados automáticamente (Tesla)</h2><div class="sec-sub" id="viajes-auto-estado">B5 — viajes detectados por telemetría, todavía no importados al historial de abajo</div></div></div></div>
+    <div class="lista" id="lista-viajes-auto"></div>
   </div>
 
   <div class="sec">
@@ -785,6 +829,34 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
   <div class="sec">
     <div class="sec-h"><h2>Lugares</h2></div>
     <div class="lista" id="lista-lugares"></div>
+  </div>
+
+  <div class="sec" id="sec-lugares-d1">
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="pin"></span><div><h2>Lugares (Tesla)</h2><div class="sec-sub" id="lugares-d1-estado">B7 — geofences guardados en D1, usados para clasificar viajes/cargas automáticamente</div></div></div><button type="button" class="ver" id="btn-add-lugar-d1">+ Añadir</button></div>
+
+    <form class="lista form-oculto" id="form-lugar-d1" style="margin-bottom:12px" novalidate>
+      <div style="padding:16px" class="form-grid">
+        <label>Nombre<input type="text" id="fl-nombre" placeholder="Casa" required autocomplete="off"></label>
+        <label>Categoría
+          <select id="fl-categoria">
+            <option value="">Sin categoría</option>
+            <option value="casa">Casa</option>
+            <option value="trabajo">Trabajo</option>
+            <option value="otro">Otro</option>
+          </select>
+        </label>
+        <label>Latitud<input type="number" step="0.000001" min="-90" max="90" id="fl-lat" required inputmode="decimal"></label>
+        <label>Longitud<input type="number" step="0.000001" min="-180" max="180" id="fl-lng" required inputmode="decimal"></label>
+        <label>Radio en metros (opcional, 150 por defecto)<input type="number" step="1" min="1" max="5000" id="fl-radio" placeholder="150" inputmode="numeric"></label>
+        <label style="grid-column:1/-1;display:flex;flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="fl-oculto" style="width:auto"> Ocultar en exportaciones anonimizadas</label>
+        <div class="form-acciones">
+          <button class="btn-secundario" type="button" id="fl-cancelar">Cancelar</button>
+          <button class="btn-primario" type="submit" id="fl-guardar">Guardar lugar</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="lista" id="lista-lugares-d1"></div>
   </div>
 
 </div>
@@ -1171,8 +1243,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
         <div class="fila-r"><button type="button" class="ver" id="notif-activar">Activar</button></div>
       </div>
       <div class="fila" id="fila-web-push" style="display:none">
-        <div class="fila-tx"><div class="t1">Notificaciones push (Fase 3)</div><div class="t2" id="push-estado">Pendiente de backend — ver informe de la Fase 3</div></div>
+        <div class="fila-tx"><div class="t1">Notificaciones push (Fase 3/B16)</div><div class="t2" id="push-estado">Pendiente de backend — ver informe de la Fase 3</div></div>
         <div class="fila-r"><button type="button" class="ver" id="push-activar">Activar</button></div>
+      </div>
+      <div class="fila" id="fila-web-push-vapid" style="display:none">
+        <div class="fila-tx"><div class="t1">Clave pública VAPID</div><div class="t2">Necesaria para activar las notificaciones push — la genera el backend, ver informe de la Fase 3</div></div>
+        <div class="fila-r"><input type="text" id="push-vapid-key" placeholder="clave pública VAPID" class="input-inline" style="width:180px"></div>
       </div>
     </div>
     <div class="lista" id="lista-categorias-push" style="display:none;margin-top:10px"></div>
@@ -1191,7 +1267,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
       <div style="padding:16px" class="form-grid">
         <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" autocomplete="off" data-lpignore="true" placeholder="Pendiente de tu cuenta de desarrollador"></label>
         <label>URL del backend (Cloudflare Worker)<input type="text" id="tesla-backend-url" autocomplete="off" data-lpignore="true" placeholder="https://api.tudominio.com"></label>
-        <label>Clave de administración del backend<input type="password" id="tesla-admin-key" autocomplete="new-password" data-lpignore="true" placeholder="La misma ADMIN_TOKEN que pusiste en Cloudflare"></label>
+        <label>Token de sesión<input type="password" id="tesla-session-token" autocomplete="new-password" data-lpignore="true" placeholder="Pega el token de sesión de este dispositivo"></label>
         <div class="form-acciones">
           <button class="btn-secundario" id="tesla-guardar-config">Guardar config.</button>
           <button class="btn-primario" id="tesla-conectar">Conectar con Tesla</button>
@@ -1225,7 +1301,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
   </div>
 
   <div class="sec">
-    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="nube"></span><div><h2>Sincronización con GitHub</h2><div class="sec-sub">Así comparten datos tus dispositivos</div></div></div></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="nube"></span><div><h2 id="gh-sec-titulo">Sincronización con GitHub</h2><div class="sec-sub" id="gh-sec-sub">Así comparten datos tus dispositivos</div></div></div></div>
     <div class="estado-sync"><div class="ehd"><span class="epunto off" id="gh-estado-dot"></span><div class="etxt"><div class="et" id="gh-estado">Sin configurar todavía.</div></div></div></div>
     <div id="gh-aviso-publico" style="display:none;margin-bottom:10px"></div>
     <div class="lista" style="margin-bottom:10px">
@@ -1236,10 +1312,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
         <div class="form-acciones">
           <button class="btn-secundario" id="gh-guardar-config">Guardar config.</button>
           <button class="btn-primario" id="gh-sync">Sincronizar ahora</button>
+          <button class="btn-secundario" id="gh-eliminar-token" type="button">Eliminar credencial guardada</button>
         </div>
       </div>
     </div>
     <p style="font-size:12px;color:var(--txt3);padding:0 4px">Una vez configurado, cada cambio se sincroniza solo unos segundos después — no hace falta pulsar el botón salvo que quieras forzarlo ya. El token se guarda solo en este dispositivo, nunca se sube al repositorio.</p>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px" id="gh-eliminar-token-nota">Cuando el token deje de ser necesario (por ejemplo si ya no quieres copia de seguridad en GitHub, o D1 es tu única sincronización), puedes borrarlo del navegador con el botón de arriba sin perder el repositorio ni la ruta configurados. Pulsa dos veces para confirmar.</p>
   </div>
 
   <div class="sec" id="sec-d1-sync" style="display:none">
@@ -1252,6 +1330,22 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
       </div>
     </div>
     <p style="font-size:12px;color:var(--txt3);padding:0 4px">Usa la misma URL de backend configurada en "Conexión Tesla". Mientras el Worker no tenga desplegado un binding D1 con estas rutas, la prueba fallará con un error claro — no se simula ningún dato.</p>
+
+    <!-- B2 (FASE B): migración segura con dry-run antes de empezar a usar D1 como fuente canónica.
+         Nunca escribe nada hasta que el usuario ha visto el análisis y pulsa "Confirmar migración". -->
+    <div class="lista" style="margin-top:10px">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Migración segura a D1</div><div class="t2">Analiza qué pasaría ANTES de mover nada — nunca escribe sin confirmación</div></div>
+        <div class="fila-r"><button type="button" class="ver" id="btn-analizar-migracion-d1">Analizar</button></div>
+      </div>
+    </div>
+    <div id="migracion-d1-resultado" style="display:none">
+      <div id="migracion-d1-detalle" style="font-size:13px;padding:4px"></div>
+      <div class="form-acciones" style="padding:0 4px 8px">
+        <button class="btn-secundario" type="button" id="btn-cancelar-migracion-d1">Cerrar</button>
+        <button class="btn-primario" type="button" id="btn-confirmar-migracion-d1">Confirmar migración</button>
+      </div>
+    </div>
   </div>
 
   <div class="sec" id="sec-automatizacion" style="display:none">
@@ -1270,19 +1364,89 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
         </div>
       </div>
     </div>
+    <h3 style="font-size:13px;margin:14px 4px 6px;color:var(--txt2)">B15 — Aviso de presión de neumáticos (TPMS)</h3>
+    <div class="lista" style="margin-bottom:6px">
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Avisar si algún neumático baja de</div><div class="t2" id="tpms-estado">Sin configurar — sin umbral, nunca se avisa (no se asume un valor "seguro" por ti)</div></div>
+        <div class="fila-r" style="gap:6px;display:flex;align-items:center">
+          <input type="number" step="0.1" min="1" max="4" id="tpms-umbral" style="width:70px;text-align:right" class="input-inline"> bar
+          <button type="button" class="btn-secundario" id="btn-guardar-tpms">Guardar</button>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px 8px">La presión recomendada (placard) viene en la etiqueta de la puerta del conductor — suele rondar 2.9 bar delanteros / 2.8 traseros en frío, pero varía por versión y neumático. Introduce tú el umbral: la app nunca asume uno por defecto.</p>
     <h3 style="font-size:13px;margin:14px 4px 6px;color:var(--txt2)">Pendientes</h3>
     <div id="lista-pendientes-auto" class="lista-automatizacion"><p class="txt-secundario">Sin comprobar todavía.</p></div>
     <h3 style="font-size:13px;margin:14px 4px 6px;color:var(--txt2)">Alertas</h3>
     <div id="lista-alertas-auto" class="lista-automatizacion"></div>
     <p style="font-size:12px;color:var(--txt3);padding:8px 4px 0">Requiere el bridge de telemetría desplegado (ver infra/README.md) y el vehículo conectado. Un viaje o carga que el sistema no pueda determinar con seguridad aparece aquí para que respondas tú — nunca se inventa un dato.</p>
+
+    <h3 style="font-size:13px;margin:18px 4px 6px;color:var(--txt2)">B8 — Reglas: clasificación automática de viajes</h3>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px 8px">Si origen/destino coinciden con la regla, el viaje se clasifica solo como Trabajo/Personal/Otro. Sin origen ni destino, la regla se aplica siempre (comodín). Si dos reglas activas dieran resultados distintos para el mismo viaje, no se aplica ninguna (nunca se elige al azar) — aparecerá en "Pendientes".</p>
+    <div class="lista" id="lista-reglas-viaje" style="margin-bottom:8px"></div>
+    <button type="button" class="ver" id="btn-add-regla-viaje" style="margin:0 4px 14px">+ Nueva regla de clasificación</button>
+    <form class="lista form-oculto" id="form-regla-viaje" style="margin-bottom:14px" novalidate>
+      <div style="padding:16px" class="form-grid">
+        <label>Origen (opcional, "cualquiera" si se deja vacío)
+          <select id="fr-viaje-origen"><option value="">Cualquiera</option></select>
+        </label>
+        <label>Destino (opcional, "cualquiera" si se deja vacío)
+          <select id="fr-viaje-destino"><option value="">Cualquiera</option></select>
+        </label>
+        <label>Clasificar como
+          <select id="fr-viaje-clasificacion">
+            <option value="trabajo">Trabajo</option>
+            <option value="personal">Personal</option>
+            <option value="otro">Otro</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="fr-viaje-activa" style="width:auto" checked> Regla activa</label>
+        <div class="form-acciones">
+          <button class="btn-secundario" type="button" id="fr-viaje-cancelar">Cancelar</button>
+          <button class="btn-primario" type="submit" id="fr-viaje-guardar">Guardar regla</button>
+        </div>
+      </div>
+    </form>
+
+    <h3 style="font-size:13px;margin:18px 4px 6px;color:var(--txt2)">B8 — Reglas: precio automático de carga</h3>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px 8px">Si el lugar de la carga coincide (o "cualquiera" si no se indica lugar), se le asigna un coste automáticamente: gratuita, un precio por kWh o un importe total fijo.</p>
+    <div class="lista" id="lista-reglas-carga" style="margin-bottom:8px"></div>
+    <button type="button" class="ver" id="btn-add-regla-carga" style="margin:0 4px 14px">+ Nueva regla de precio</button>
+    <form class="lista form-oculto" id="form-regla-carga" style="margin-bottom:8px" novalidate>
+      <div style="padding:16px" class="form-grid">
+        <label>Lugar (opcional, "cualquiera" si se deja vacío)
+          <select id="fr-carga-lugar"><option value="">Cualquiera</option></select>
+        </label>
+        <label>Tipo de precio
+          <select id="fr-carga-tipo-precio">
+            <option value="gratuita">Gratuita (0 €)</option>
+            <option value="kwh">€ por kWh</option>
+            <option value="total">Importe fijo total</option>
+          </select>
+        </label>
+        <label>Valor (€/kWh o € totales, según el tipo elegido)<input type="number" step="0.01" min="0.01" id="fr-carga-valor" inputmode="decimal"></label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="fr-carga-activa" style="width:auto" checked> Regla activa</label>
+        <div class="form-acciones">
+          <button class="btn-secundario" type="button" id="fr-carga-cancelar">Cancelar</button>
+          <button class="btn-primario" type="submit" id="fr-carga-guardar">Guardar regla</button>
+        </div>
+      </div>
+    </form>
   </div>
 
   <div class="sec">
     <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="descarga"></span><div><h2>Copia de seguridad</h2><div class="sec-sub">Exportar, importar y informes</div></div></div></div>
     <div class="lista">
       <div class="fila">
-        <div class="fila-tx"><div class="t1">Exportar datos (.json)</div><div class="t2">Copia completa, para restaurar en Mi Tesla</div></div>
+        <div class="fila-tx"><div class="t1">Exportar datos (.json)</div><div class="t2" id="btn-exportar-sub">Copia completa, para restaurar en Mi Tesla</div></div>
         <div class="fila-r"><button type="button" class="ver" id="btn-exportar">Descargar</button></div>
+      </div>
+      <!-- B27 (FASE B): copia ANÓNIMA, distinta de la copia privada de arriba — sin VIN, con las
+           coordenadas de casa/trabajo ocultas y el resto difuminadas (~11 km), pensada para
+           compartir con un taller o para depurar sin ceder datos identificables. -->
+      <div class="fila">
+        <div class="fila-tx"><div class="t1">Exportar copia anónima (.json)</div><div class="t2">Sin VIN ni ubicaciones precisas — para compartir</div></div>
+        <div class="fila-r"><button type="button" class="ver" id="btn-exportar-anonimo">Descargar</button></div>
       </div>
       <div class="fila">
         <div class="fila-tx"><div class="t1">Exportar viajes (.csv)</div><div class="t2">Para abrir en Excel o Google Sheets</div></div>

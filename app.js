@@ -255,10 +255,72 @@ function aCSV(filas, columnas){
   filas.forEach(function(f){ lineas.push(columnas.map(function(c){return esc(c.valor(f));}).join(';')); });
   return lineas.join('\r\n');
 }
+/* ---------- B26/B27 (FASE B): backup completo (incluye D1) y copia anónima ----------
+ * Hasta esta sesión, "Exportar datos" descargaba literalmente JSON.stringify(DATOS) — solo lo que
+ * vive en localStorage de ESTE dispositivo. Viajes/cargas detectados automáticamente por telemetría,
+ * ubicaciones, reglas, pendientes y alertas viven SOLO en D1 y nunca salían en ningún backup. Estas
+ * dos funciones piden ese volcado a /backup/completo (worker.js) y lo añaden al archivo — si el
+ * backend no está configurado, el VIN aún no se conoce, o la petición falla, se descarga igual con
+ * los datos locales y se deja constancia explícita del motivo en el propio archivo (aviso_d1): la
+ * copia que ya funcionaba nunca se bloquea por esto (NORMA: no dar nada por corregido/completo sin
+ * comprobarlo — aquí, sin fingir que se incluyó algo que en realidad falló). */
+function backendConfigParaBackup(){
+  var tcfg = cargarConfigTesla();
+  var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
+  var vin = DATOS.vehiculo && DATOS.vehiculo.tesla_vin;
+  if(!backendUrl || !tcfg.sessionToken || !vin) return null;
+  return { backendUrl: backendUrl, sessionToken: tcfg.sessionToken, vin: vin };
+}
+async function construirBackupParaDescarga(modo, fetchImpl){
+  fetchImpl = fetchImpl || fetch;
+  var anonimo = modo==='anonimizado';
+  var cfg = backendConfigParaBackup();
+  var meta = { modo: anonimo?'anonimizado':'privado', generado_en: ahoraISO() };
+  var cuerpo;
+  if(!anonimo){
+    // B26 — CORRECCIÓN: la primera versión de esto metía todo DATOS dentro de una clave
+    // "datos_locales", lo que ROMPÍA el importador de siempre ("Importar datos (.json)" lee
+    // bruto.viajes/bruto.cargas/... directamente del nivel superior — ver validarFormaDatos/
+    // sanearImportacion). Un backup generado con ese formato habría fallado al reimportarse
+    // ("El archivo no parece una copia de Mi Tesla"), justo lo que el criterio de B26 exige
+    // probar (export → base vacía → import → comparar totales). Corregido: el objeto raíz sigue
+    // siendo EXACTAMENTE DATOS, tal cual siempre ha sido; el volcado de D1 va aparte, bajo una
+    // clave reservada (_backup_meta) que el importador de siempre simplemente ignora.
+    cuerpo = Object.assign({}, DATOS, { _backup_meta: meta });
+  } else {
+    // B27: la copia anónima NUNCA incluye el blob local tal cual (puede llevar VIN, GPS de casa,
+    // notas de texto libre) — solo el volcado D1 ya anonimizado por el propio backend (B14). No
+    // tiene la forma que espera "Importar datos" a propósito: no es para restaurar, es para
+    // compartir/depurar.
+    cuerpo = { _backup_meta: meta, nota: 'Copia anónima: solo datos de vehículo rastreados automáticamente vía D1 (viajes, cargas, ubicaciones, alertas...), sin VIN y con ubicaciones difuminadas u ocultas. NO incluye lo introducido a mano en este dispositivo (gastos, notas, viajes/cargas manuales) — para eso, usa la copia privada. Este archivo no está pensado para "Importar datos".' };
+  }
+  if(!cfg){
+    cuerpo._backup_meta.aviso_d1 = 'Backend de Tesla no configurado (o VIN desconocido todavía) — no se ha podido incluir ningún dato de D1 (viajes/cargas automáticos, ubicaciones, reglas, pendientes, alertas).';
+    return cuerpo;
+  }
+  try{
+    var url = cfg.backendUrl+'/backup/completo?vin='+encodeURIComponent(cfg.vin)+(anonimo?'&modo=anonimizado':'');
+    var res = await fetchImpl(url, { headers: { 'Authorization': 'Bearer '+cfg.sessionToken } });
+    var d1 = await res.json().catch(function(){ return null; });
+    if(!res.ok) throw new Error((d1&&d1.error)||('http_'+res.status));
+    cuerpo._backup_meta.datos_d1 = d1;
+  }catch(e){
+    cuerpo._backup_meta.aviso_d1 = 'No se pudo obtener el volcado de D1 ('+String((e&&e.message)||e)+').'+(anonimo?'':' Esta copia solo incluye los datos locales de este dispositivo.');
+  }
+  return cuerpo;
+}
 document.getElementById('btn-exportar').addEventListener('click', function(){
-  descargarArchivo(JSON.stringify(DATOS, null, 2), 'mitesla-datos-'+fechaLocalISO()+'.json', 'application/json');
-  localStorage.setItem('mitesla-ultima-backup', ahoraISO()); // Fase 3, punto 20: para poder mostrar "última copia" en el centro de calidad de datos
-  toast('Copia descargada');
+  construirBackupParaDescarga('privado').then(function(cuerpo){
+    descargarArchivo(JSON.stringify(cuerpo, null, 2), 'mitesla-datos-'+fechaLocalISO()+'.json', 'application/json');
+    localStorage.setItem('mitesla-ultima-backup', ahoraISO()); // Fase 3, punto 20: para poder mostrar "última copia" en el centro de calidad de datos
+    toast(cuerpo._backup_meta.datos_d1 ? 'Copia descargada (incluye datos de D1)' : 'Copia descargada (solo datos locales)');
+  });
+});
+document.getElementById('btn-exportar-anonimo').addEventListener('click', function(){
+  construirBackupParaDescarga('anonimizado').then(function(cuerpo){
+    descargarArchivo(JSON.stringify(cuerpo, null, 2), 'mitesla-anonimo-'+fechaLocalISO()+'.json', 'application/json');
+    toast(cuerpo._backup_meta.datos_d1 ? 'Copia anónima descargada' : 'Copia anónima descargada (sin datos de D1: revisa la configuración del backend)');
+  });
 });
 document.getElementById('btn-exportar-csv-viajes').addEventListener('click', function(){
   var csv = aCSV(DATOS.viajes, [
@@ -315,7 +377,7 @@ function refrescarTodasLasVistas(){
 // al no tener ya el dataset_id anterior, no se limite a rellenarse otra vez con lo que hay en el remoto.
 document.getElementById('btn-reiniciar-dispositivo').addEventListener('click', function(){
   confirmarAccion('Reiniciar este dispositivo', 'Esto vac\u00EDa los datos de ejemplo SOLO en este dispositivo y pausa la sincronizaci\u00F3n autom\u00E1tica (no se descargar\u00E1 el remoto por s\u00ED sola). Tu configuraci\u00F3n de GitHub y Tesla no se toca. Esta acci\u00F3n no se puede deshacer aqu\u00ED \u2014 si quieres conservar los datos de ejemplo, descarga antes una copia en .json.', function(){
-    DATOS = normalizarDatos(datosVaciosParaCocheReal());
+    DATOS = conservarBusinessCanonical(normalizarDatos(datosVaciosParaCocheReal()));
     DATOS.dataset_id = nuevoId();
     guardarDatos(true);
     localStorage.setItem('mitesla-sync-suspendida', '1');
@@ -328,7 +390,7 @@ document.getElementById('btn-reiniciar-dispositivo').addEventListener('click', f
 // mezcle el demo viejo), y se sincroniza inmediatamente para que sobrescriba lo que hay en GitHub.
 document.getElementById('btn-empezar-cero').addEventListener('click', function(){
   confirmarAccion('Empezar de cero completamente', 'Esto borra todos los viajes, cargas, gastos y el historial de ejemplo, y sobrescribe lo que haya en GitHub \u2014 se borrar\u00E1 tambi\u00E9n en el resto de tus dispositivos la pr\u00F3xima vez que sincronicen. Esta acci\u00F3n no se puede deshacer aqu\u00ED \u2014 si quieres conservar los datos de ejemplo, descarga antes una copia en .json.', function(){
-    DATOS = normalizarDatos(datosVaciosParaCocheReal());
+    DATOS = conservarBusinessCanonical(normalizarDatos(datosVaciosParaCocheReal()));
     DATOS.dataset_id = nuevoId(); // invalida el dataset anterior: una fusi\u00F3n con el remoto viejo no lo mezclar\u00E1
     localStorage.removeItem('mitesla-sync-suspendida');
     guardarDatos(true);
@@ -400,7 +462,7 @@ document.getElementById('btn-informe-trabajo-csv').addEventListener('click', fun
     {titulo:'Origen', valor:function(v){return v.origen;}},
     {titulo:'Destino', valor:function(v){return v.destino;}},
     {titulo:'Conductor', valor:function(v){return v.conductor||'';}},
-    {titulo:'Km', valor:function(v){return v.km.toFixed(1);}}
+    {titulo:'Km', valor:function(v){return fmt1(v.km);}}
   ].concat(!isNaN(tarifa) ? [{titulo:'Importe (€)', valor:function(v){return (v.km*tarifa).toFixed(2);}}] : []));
   var observacionesCsv = (document.getElementById('informe-observaciones').value||'').trim();
   if(observacionesCsv) csv += '\r\n\r\nObservaciones;'+observacionesCsv.replace(/;/g,',');
@@ -419,7 +481,7 @@ document.getElementById('btn-informe-trabajo').addEventListener('click', functio
     return '<tr><td>'+new Date(v.fecha).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})+'</td>'+
       '<td>'+esc(v.origen)+' → '+esc(v.destino)+'</td>'+
       '<td>'+esc(v.conductor||'—')+'</td>'+
-      '<td style="text-align:right">'+v.km.toFixed(1)+' km</td>'+
+      '<td style="text-align:right">'+fmt1(v.km)+' km</td>'+
       (totalImporte!==null ? '<td style="text-align:right">'+(v.km*tarifa).toFixed(2)+' €</td>' : '')+
       '</tr>';
   }).join('');
@@ -496,7 +558,7 @@ document.getElementById('btn-exportar-pdf').addEventListener('click', function()
   }).join('');
 
   var top5Viajes = viajesA\u00F1o.slice().sort(function(a,b){return b.km-a.km;}).slice(0,5)
-    .map(function(v){ return '<tr><td>'+new Date(v.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'short'})+'</td><td>'+esc(v.origen)+' \u2192 '+esc(v.destino)+'</td><td style="text-align:right">'+v.km.toFixed(0)+' km</td></tr>'; })
+    .map(function(v){ return '<tr><td>'+new Date(v.fecha).toLocaleDateString('es-ES',{day:'numeric',month:'short'})+'</td><td>'+esc(v.origen)+' \u2192 '+esc(v.destino)+'</td><td style="text-align:right">'+fmt0(v.km)+' km</td></tr>'; })
     .join('') || '<tr><td colspan="3" style="color:#888">Sin viajes registrados</td></tr>';
 
   var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe Mi Tesla '+a\u00F1o+'</title><style>'+
@@ -578,7 +640,7 @@ document.getElementById('input-importar').addEventListener('change', function(e)
       '. Versión del archivo: '+versionOrigen+' (se migra a la '+SCHEMA_VERSION+').'+
       (r.avisos.length ? '\n'+r.avisos.join(' ') : '');
     confirmarAccion('Importar datos', 'Se reemplazarán los datos actuales de este dispositivo por los del archivo. '+resumen, function(){
-      DATOS = r.datos;
+      DATOS = conservarBusinessCanonical(r.datos);
       guardarDatos(true); // se guarda localmente sin disparar la sincronización automática todavía
       renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
       renderLugares(); renderPlanes(); renderNeumaticos(); renderMantenimiento(); renderDocumentos(); renderAccesorios();
@@ -709,7 +771,7 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
 }
 
 /* ---------- Versión de la app instalada (para saber si está al día) ---------- */
-var APP_VERSION = '2026.09.20-r3';
+var APP_VERSION = '2026.10.07-micro-aa';
 
 /* ---------- Modelo de datos (semilla + localStorage) ---------- */
 var SCHEMA_VERSION = 2;
@@ -919,6 +981,10 @@ function validarFormaDatos(d){
 var ID_SEGURO = /^[A-Za-z0-9_-]{1,80}$/;
 var TIPOS_CARGA_VALIDOS = ['domestica','supercharger','publico','trabajo','otros'];
 var CATEGORIAS_GASTO_VALIDAS = ['seguro','neumaticos','mantenimiento','itv','accesorio','otros','multa','limpieza','parking','peaje'];
+// B23: 'desconocido' es un cost_source legítimo — una carga importada/automática sin precio
+// fiable NUNCA se etiqueta 'estimado' (eso implicaría que hay una estimación real detrás).
+var COST_SOURCE_VALIDOS = ['conocido','estimado','facturado','desconocido'];
+var CATEGORIAS_MANTENIMIENTO_VALIDAS = ['neumaticos','filtros','frenos','escobillas','reparacion','revision','itv','seguro','otros'];
 
 /** Convierte cualquier valor en un string seguro y acotado (nunca objetos/arrays,
  *  nunca más largo de lo razonable) — así un JSON manipulado no puede colar un
@@ -949,6 +1015,141 @@ function fechaValidaOFallback(v, fallbackISO){
   var d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s+'T00:00:00' : s);
   return isNaN(d.getTime()) ? fallbackISO : s;
 }
+
+/* C1 (FASE C, auditoría de seguridad frontend) — saneadores por colección, UNA sola vez.
+ * Antes vivían como funciones anónimas solo dentro de sanearImportacion() (usada al importar un
+ * .json a mano), así que cualquier dato que entrase por OTRA vía externa —el remoto de GitHub en
+ * sincronizarGithub()/fusionarDatos()— se fusionaba SIN pasar por idSeguro()/comoTextoSeguro()/
+ * comoNumeroSeguro(). El texto libre (origen, concepto, nombre…) ya se escapaba con esc() al
+ * pintarlo, pero el id NO: se usa tal cual en atributos HTML como data-editar-viaje="'+v.id+'" en
+ * más de 30 sitios. Un datos.json remoto manipulado (repo comprometido, o simplemente compartido)
+ * con un viaje cuyo id fuese, por ejemplo, algo terminado en ">*+ podía romper el atributo e
+ * inyectar HTML/JS al renderizar — "no depender únicamente de esc()" (auditoría). LA CORRECCIÓN
+ * DE ARQUITECTURA (no un parche): un único saneador por colección, reutilizado tanto al importar
+ * como al fusionar el remoto de GitHub (ver fusionarPorId más abajo) — un solo sitio que decide
+ * qué es un dato válido, nunca dos copias de la misma validación que puedan divergir. */
+var SANEADOR_ITEM = {
+  viajes: function(v){
+    var km = comoNumeroSeguro(v.km, 0, 5000, null);
+    if(km===null) return null;
+    return { id: idSeguro(v.id), fecha: comoTextoSeguro(v.fecha,30), origen: comoTextoSeguro(v.origen,150), destino: comoTextoSeguro(v.destino,150),
+      km: km, duracion_min: comoNumeroSeguro(v.duracion_min,0,1440,0),
+      bateria_inicial: comoNumeroSeguro(v.bateria_inicial,0,100,null), bateria_final: comoNumeroSeguro(v.bateria_final,0,100,null),
+      etiqueta: comoTextoSeguro(v.etiqueta,40), conductor: comoTextoSeguro(v.conductor,80),
+      created_at: comoTextoSeguro(v.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(v.updated_at,40)||ahoraISO() };
+  },
+  cargas: function(c){
+    var kwh = comoNumeroSeguro(c.kwh, 0, 500, null);
+    if(kwh===null) return null;
+    // B23: sin precio válido, NO se inventa 0 €/kWh (antes: comoNumeroSeguro(...,0) fabricaba una
+    // carga "gratis" a partir de un dato simplemente ausente — norma "null ≠ 0").
+    var precio = comoNumeroSeguro(c.precio_kwh,0,5,null);
+    var totalPorDefecto = (precio!==null) ? Math.round(kwh*precio*100)/100 : null;
+    var totalCost = comoNumeroSeguro(c.total_cost,0,100000, totalPorDefecto);
+    if(typeof c.total_cost==='number' && isFinite(c.total_cost)) totalCost = c.total_cost; // el propio dato manda si es válido, aunque no haya precio_kwh fiable (p.ej. factura real)
+    return { id: idSeguro(c.id), fecha: comoTextoSeguro(c.fecha,30), lugar: comoTextoSeguro(c.lugar,150),
+      tipo: TIPOS_CARGA_VALIDOS.indexOf(c.tipo)!==-1 ? c.tipo : 'otros',
+      kwh: kwh, precio_kwh: precio,
+      bateria_inicial: comoNumeroSeguro(c.bateria_inicial,0,100,null), bateria_final: comoNumeroSeguro(c.bateria_final,0,100,null),
+      ac_dc: (c.ac_dc==='AC'||c.ac_dc==='DC') ? c.ac_dc : null,
+      red: comoTextoSeguro(c.red,150) || null,
+      potencia_max_kw: comoNumeroSeguro(c.potencia_max_kw,0,1000,null),
+      total_cost: totalCost,
+      cost_source: COST_SOURCE_VALIDOS.indexOf(c.cost_source)!==-1 ? c.cost_source : (totalCost===null ? 'desconocido' : 'estimado'),
+      // B13: si no se preservan estos 3 campos al importar/fusionar, una carga ya reconciliada con
+      // su factura real volvería a aparecer como "sin reconciliar" tras una copia de seguridad o una
+      // sincronización — justo la corrección manual que la norma dice que nunca debe perderse.
+      factura_reconciliada: c.factura_reconciliada===true,
+      factura_numero: comoTextoSeguro(c.factura_numero,80) || null,
+      factura_fecha: comoTextoSeguro(c.factura_fecha,30) || null,
+      data_source: comoTextoSeguro(c.data_source,40) || 'manual',
+      notas: comoTextoSeguro(c.notas,300),
+      vehicle_id: comoTextoSeguro(c.vehicle_id,80) || null,
+      fecha_fin: comoTextoSeguro(c.fecha_fin,30) || null,
+      perdidas_pct: comoNumeroSeguro(c.perdidas_pct,0,99,null),
+      kwh_red_estimado: comoNumeroSeguro(c.kwh_red_estimado,0,1000,null),
+      origen_energia: (c.origen_energia && typeof c.origen_energia==='object') ? {
+        red_pct: comoNumeroSeguro(c.origen_energia.red_pct,0,100,100),
+        solar_pct: comoNumeroSeguro(c.origen_energia.solar_pct,0,100,0),
+        bateria_pct: comoNumeroSeguro(c.origen_energia.bateria_pct,0,100,0),
+        coste_contable: comoNumeroSeguro(c.origen_energia.coste_contable,0,100000,0),
+        coste_marginal: comoNumeroSeguro(c.origen_energia.coste_marginal,0,100000,0),
+        ahorro_frente_a_red: comoNumeroSeguro(c.origen_energia.ahorro_frente_a_red,0,100000,0)
+      } : null,
+      created_at: comoTextoSeguro(c.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(c.updated_at,40)||ahoraISO() };
+  },
+  gastos: function(g){
+    var importe = comoNumeroSeguro(g.importe, -100000, 1000000, null);
+    if(importe===null) return null;
+    return { id: idSeguro(g.id), fecha: comoTextoSeguro(g.fecha,30),
+      categoria: CATEGORIAS_GASTO_VALIDAS.indexOf(g.categoria)!==-1 ? g.categoria : 'otros',
+      concepto: comoTextoSeguro(g.concepto,150), importe: importe,
+      created_at: comoTextoSeguro(g.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(g.updated_at,40)||ahoraISO() };
+  },
+  plantillas_viaje: function(p){
+    if(!comoTextoSeguro(p.destino,150)) return null;
+    return { id: idSeguro(p.id), origen: comoTextoSeguro(p.origen,150), destino: comoTextoSeguro(p.destino,150),
+      etiqueta: ['personal','trabajo','otro'].indexOf(p.etiqueta)!==-1 ? p.etiqueta : 'personal',
+      conductor: comoTextoSeguro(p.conductor,80), notas: comoTextoSeguro(p.notas,200),
+      km_aprox: comoNumeroSeguro(p.km_aprox,0,5000,null),
+      created_at: comoTextoSeguro(p.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(p.updated_at,40)||ahoraISO() };
+  },
+  neumaticos_historico: function(h){
+    var odoIni = comoNumeroSeguro(h.odometer_install, 0, 2000000, null);
+    if(odoIni===null || ['delanteros','traseros'].indexOf(h.eje)===-1) return null;
+    return { id: idSeguro(h.id), marca: comoTextoSeguro(h.marca,80), modelo: comoTextoSeguro(h.modelo,80),
+      medida: comoTextoSeguro(h.medida,40), eje: h.eje,
+      installed_at: comoTextoSeguro(h.installed_at,30), odometer_install: odoIni,
+      removed_at: comoTextoSeguro(h.removed_at,30) || null, odometer_remove: comoNumeroSeguro(h.odometer_remove,0,2000000,null),
+      purchase_price: comoNumeroSeguro(h.purchase_price,0,100000,null), notes: comoTextoSeguro(h.notes,200),
+      created_at: comoTextoSeguro(h.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(h.updated_at,40)||ahoraISO() };
+  },
+  mantenimiento: function(m){
+    if(!comoTextoSeguro(m.concepto,150)) return null;
+    return { id: idSeguro(m.id), categoria: CATEGORIAS_MANTENIMIENTO_VALIDAS.indexOf(m.categoria)!==-1 ? m.categoria : 'otros',
+      concepto: comoTextoSeguro(m.concepto,150), fecha: comoTextoSeguro(m.fecha,30), odometro_km: comoNumeroSeguro(m.odometro_km,0,2000000,null),
+      coste: comoNumeroSeguro(m.coste,0,100000,0), notas: comoTextoSeguro(m.notas,300),
+      recordatorio_fecha: comoTextoSeguro(m.recordatorio_fecha,30) || null, recordatorio_km: comoNumeroSeguro(m.recordatorio_km,0,2000000,null),
+      created_at: comoTextoSeguro(m.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(m.updated_at,40)||ahoraISO() };
+  },
+  documentos: function(doc){
+    if(!comoTextoSeguro(doc.nombre,150)) return null;
+    return { id: idSeguro(doc.id), nombre: comoTextoSeguro(doc.nombre,150), tipo: comoTextoSeguro(doc.tipo,40),
+      fecha: comoTextoSeguro(doc.fecha,30), tamano_bytes: comoNumeroSeguro(doc.tamano_bytes,0,1000000000,null),
+      relacionado_con: comoTextoSeguro(doc.relacionado_con,80) || null, notas: comoTextoSeguro(doc.notas,300),
+      created_at: comoTextoSeguro(doc.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(doc.updated_at,40)||ahoraISO() };
+  },
+  recordatorios: function(r){
+    var km = comoNumeroSeguro(r.km_objetivo, 0, 2000000, null);
+    if(km===null || !comoTextoSeguro(r.concepto,150)) return null;
+    return { id: idSeguro(r.id), concepto: comoTextoSeguro(r.concepto,150), km_objetivo: km,
+      created_at: comoTextoSeguro(r.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(r.updated_at,40)||ahoraISO() };
+  },
+  accesorios: function(a){
+    if(!comoTextoSeguro(a.nombre,150)) return null;
+    return { id: idSeguro(a.id), nombre: comoTextoSeguro(a.nombre,150), categoria: comoTextoSeguro(a.categoria,40)||'otros',
+      fecha: comoTextoSeguro(a.fecha,30), precio: comoNumeroSeguro(a.precio,0,1000000,0),
+      meses_garantia: comoNumeroSeguro(a.meses_garantia,0,600,null),
+      created_at: comoTextoSeguro(a.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(a.updated_at,40)||ahoraISO() };
+  },
+  planes: function(p){
+    if(!comoTextoSeguro(p.nombre,150)) return null;
+    return Object.assign({}, p, { id: idSeguro(p.id), nombre: comoTextoSeguro(p.nombre,150),
+      created_at: comoTextoSeguro(p.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(p.updated_at,40)||ahoraISO() });
+  },
+  favoritos: function(f){
+    var lat = comoNumeroSeguro(f.lat,-90,90,null), lng = comoNumeroSeguro(f.lng,-180,180,null);
+    if(lat===null || lng===null) return null;
+    return { id: idSeguro(f.id), nombre: comoTextoSeguro(f.nombre,150), lat: lat, lng: lng,
+      created_at: comoTextoSeguro(f.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(f.updated_at,40)||ahoraISO() };
+  },
+  bateria_historico: function(h){
+    var pct = comoNumeroSeguro(h.capacidad_pct, 0, 100, null);
+    if(pct===null) return null;
+    return { id: idSeguro(h.id), fecha: comoTextoSeguro(h.fecha,30), capacidad_pct: pct,
+      created_at: comoTextoSeguro(h.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(h.updated_at,40)||ahoraISO() };
+  }
+};
 
 /** Saneado profundo de un JSON importado: recorre cada colección y campo,
  *  fuerza tipos y rangos razonables, sustituye ids con formato inseguro, y
@@ -1018,135 +1219,21 @@ function sanearImportacion(bruto){
     _borrados: {}
   };
 
-  d.viajes = limpiarLista(bruto.viajes, function(v){
-    var km = comoNumeroSeguro(v.km, 0, 5000, null);
-    if(km===null) return null;
-    return { id: idSeguro(v.id), fecha: comoTextoSeguro(v.fecha,30), origen: comoTextoSeguro(v.origen,150), destino: comoTextoSeguro(v.destino,150),
-      km: km, duracion_min: comoNumeroSeguro(v.duracion_min,0,1440,0),
-      bateria_inicial: comoNumeroSeguro(v.bateria_inicial,0,100,null), bateria_final: comoNumeroSeguro(v.bateria_final,0,100,null),
-      etiqueta: comoTextoSeguro(v.etiqueta,40), conductor: comoTextoSeguro(v.conductor,80),
-      created_at: comoTextoSeguro(v.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(v.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  // B23: 'desconocido' es un cost_source legítimo — una carga importada/automática sin precio
-  // fiable NUNCA se etiqueta 'estimado' (eso implicaría que hay una estimación real detrás).
-  var COST_SOURCE_VALIDOS = ['conocido','estimado','facturado','desconocido'];
-  d.cargas = limpiarLista(bruto.cargas, function(c){
-    var kwh = comoNumeroSeguro(c.kwh, 0, 500, null);
-    if(kwh===null) return null;
-    // B23: sin precio válido, NO se inventa 0 €/kWh (antes: comoNumeroSeguro(...,0) fabricaba una
-    // carga "gratis" a partir de un dato simplemente ausente — norma "null ≠ 0").
-    var precio = comoNumeroSeguro(c.precio_kwh,0,5,null);
-    var totalPorDefecto = (precio!==null) ? Math.round(kwh*precio*100)/100 : null;
-    var totalCost = comoNumeroSeguro(c.total_cost,0,100000, totalPorDefecto);
-    if(typeof c.total_cost==='number' && isFinite(c.total_cost)) totalCost = c.total_cost; // el propio dato manda si es válido, aunque no haya precio_kwh fiable (p.ej. factura real)
-    return { id: idSeguro(c.id), fecha: comoTextoSeguro(c.fecha,30), lugar: comoTextoSeguro(c.lugar,150),
-      tipo: TIPOS_CARGA_VALIDOS.indexOf(c.tipo)!==-1 ? c.tipo : 'otros',
-      kwh: kwh, precio_kwh: precio,
-      bateria_inicial: comoNumeroSeguro(c.bateria_inicial,0,100,null), bateria_final: comoNumeroSeguro(c.bateria_final,0,100,null),
-      ac_dc: (c.ac_dc==='AC'||c.ac_dc==='DC') ? c.ac_dc : null,
-      red: comoTextoSeguro(c.red,150) || null,
-      potencia_max_kw: comoNumeroSeguro(c.potencia_max_kw,0,1000,null),
-      total_cost: totalCost,
-      cost_source: COST_SOURCE_VALIDOS.indexOf(c.cost_source)!==-1 ? c.cost_source : (totalCost===null ? 'desconocido' : 'estimado'),
-      data_source: comoTextoSeguro(c.data_source,40) || 'manual',
-      notas: comoTextoSeguro(c.notas,300),
-      vehicle_id: comoTextoSeguro(c.vehicle_id,80) || null,
-      fecha_fin: comoTextoSeguro(c.fecha_fin,30) || null,
-      perdidas_pct: comoNumeroSeguro(c.perdidas_pct,0,99,null),
-      kwh_red_estimado: comoNumeroSeguro(c.kwh_red_estimado,0,1000,null),
-      origen_energia: (c.origen_energia && typeof c.origen_energia==='object') ? {
-        red_pct: comoNumeroSeguro(c.origen_energia.red_pct,0,100,100),
-        solar_pct: comoNumeroSeguro(c.origen_energia.solar_pct,0,100,0),
-        bateria_pct: comoNumeroSeguro(c.origen_energia.bateria_pct,0,100,0),
-        coste_contable: comoNumeroSeguro(c.origen_energia.coste_contable,0,100000,0),
-        coste_marginal: comoNumeroSeguro(c.origen_energia.coste_marginal,0,100000,0),
-        ahorro_frente_a_red: comoNumeroSeguro(c.origen_energia.ahorro_frente_a_red,0,100000,0)
-      } : null,
-      created_at: comoTextoSeguro(c.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(c.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  d.gastos = limpiarLista(bruto.gastos, function(g){
-    var importe = comoNumeroSeguro(g.importe, -100000, 1000000, null);
-    if(importe===null) return null;
-    return { id: idSeguro(g.id), fecha: comoTextoSeguro(g.fecha,30),
-      categoria: CATEGORIAS_GASTO_VALIDAS.indexOf(g.categoria)!==-1 ? g.categoria : 'otros',
-      concepto: comoTextoSeguro(g.concepto,150), importe: importe,
-      created_at: comoTextoSeguro(g.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(g.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  d.plantillas_viaje = limpiarLista(bruto.plantillas_viaje, function(p){
-    if(!comoTextoSeguro(p.destino,150)) return null;
-    return { id: idSeguro(p.id), origen: comoTextoSeguro(p.origen,150), destino: comoTextoSeguro(p.destino,150),
-      etiqueta: ['personal','trabajo','otro'].indexOf(p.etiqueta)!==-1 ? p.etiqueta : 'personal',
-      conductor: comoTextoSeguro(p.conductor,80), notas: comoTextoSeguro(p.notas,200),
-      km_aprox: comoNumeroSeguro(p.km_aprox,0,5000,null),
-      created_at: comoTextoSeguro(p.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(p.updated_at,40)||ahoraISO() };
-  }, 2000);
-
-  d.neumaticos_historico = limpiarLista(bruto.neumaticos_historico, function(h){
-    var odoIni = comoNumeroSeguro(h.odometer_install, 0, 2000000, null);
-    if(odoIni===null || ['delanteros','traseros'].indexOf(h.eje)===-1) return null;
-    return { id: idSeguro(h.id), marca: comoTextoSeguro(h.marca,80), modelo: comoTextoSeguro(h.modelo,80),
-      medida: comoTextoSeguro(h.medida,40), eje: h.eje,
-      installed_at: comoTextoSeguro(h.installed_at,30), odometer_install: odoIni,
-      removed_at: comoTextoSeguro(h.removed_at,30) || null, odometer_remove: comoNumeroSeguro(h.odometer_remove,0,2000000,null),
-      purchase_price: comoNumeroSeguro(h.purchase_price,0,100000,null), notes: comoTextoSeguro(h.notes,200),
-      created_at: comoTextoSeguro(h.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(h.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  var CATEGORIAS_MANTENIMIENTO_VALIDAS = ['neumaticos','filtros','frenos','escobillas','reparacion','revision','itv','seguro','otros'];
-  d.mantenimiento = limpiarLista(bruto.mantenimiento, function(m){
-    if(!comoTextoSeguro(m.concepto,150)) return null;
-    return { id: idSeguro(m.id), categoria: CATEGORIAS_MANTENIMIENTO_VALIDAS.indexOf(m.categoria)!==-1 ? m.categoria : 'otros',
-      concepto: comoTextoSeguro(m.concepto,150), fecha: comoTextoSeguro(m.fecha,30), odometro_km: comoNumeroSeguro(m.odometro_km,0,2000000,null),
-      coste: comoNumeroSeguro(m.coste,0,100000,0), notas: comoTextoSeguro(m.notas,300),
-      recordatorio_fecha: comoTextoSeguro(m.recordatorio_fecha,30) || null, recordatorio_km: comoNumeroSeguro(m.recordatorio_km,0,2000000,null),
-      created_at: comoTextoSeguro(m.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(m.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  d.documentos = limpiarLista(bruto.documentos, function(doc){
-    if(!comoTextoSeguro(doc.nombre,150)) return null;
-    return { id: idSeguro(doc.id), nombre: comoTextoSeguro(doc.nombre,150), tipo: comoTextoSeguro(doc.tipo,40),
-      fecha: comoTextoSeguro(doc.fecha,30), tamano_bytes: comoNumeroSeguro(doc.tamano_bytes,0,1000000000,null),
-      relacionado_con: comoTextoSeguro(doc.relacionado_con,80) || null, notas: comoTextoSeguro(doc.notas,300),
-      created_at: comoTextoSeguro(doc.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(doc.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  d.recordatorios = limpiarLista(bruto.recordatorios, function(r){
-    var km = comoNumeroSeguro(r.km_objetivo, 0, 2000000, null);
-    if(km===null || !comoTextoSeguro(r.concepto,150)) return null;
-    return { id: idSeguro(r.id), concepto: comoTextoSeguro(r.concepto,150), km_objetivo: km,
-      created_at: comoTextoSeguro(r.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(r.updated_at,40)||ahoraISO() };
-  }, 2000);
-
-  d.accesorios = limpiarLista(bruto.accesorios, function(a){
-    if(!comoTextoSeguro(a.nombre,150)) return null;
-    return { id: idSeguro(a.id), nombre: comoTextoSeguro(a.nombre,150), categoria: comoTextoSeguro(a.categoria,40)||'otros',
-      fecha: comoTextoSeguro(a.fecha,30), precio: comoNumeroSeguro(a.precio,0,1000000,0),
-      meses_garantia: comoNumeroSeguro(a.meses_garantia,0,600,null),
-      created_at: comoTextoSeguro(a.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(a.updated_at,40)||ahoraISO() };
-  }, TOPE);
-
-  d.planes = limpiarLista(bruto.planes, function(p){
-    if(!comoTextoSeguro(p.nombre,150)) return null;
-    return Object.assign({}, p, { id: idSeguro(p.id), nombre: comoTextoSeguro(p.nombre,150),
-      created_at: comoTextoSeguro(p.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(p.updated_at,40)||ahoraISO() });
-  }, 2000);
-
-  d.favoritos = limpiarLista(bruto.favoritos, function(f){
-    var lat = comoNumeroSeguro(f.lat,-90,90,null), lng = comoNumeroSeguro(f.lng,-180,180,null);
-    if(lat===null || lng===null) return null;
-    return { id: idSeguro(f.id), nombre: comoTextoSeguro(f.nombre,150), lat: lat, lng: lng,
-      created_at: comoTextoSeguro(f.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(f.updated_at,40)||ahoraISO() };
-  }, 2000);
-
-  d.bateria_historico = limpiarLista(bruto.bateria_historico, function(h){
-    var pct = comoNumeroSeguro(h.capacidad_pct, 0, 100, null);
-    if(pct===null) return null;
-    return { id: idSeguro(h.id), fecha: comoTextoSeguro(h.fecha,30), capacidad_pct: pct,
-      created_at: comoTextoSeguro(h.created_at,40)||ahoraISO(), updated_at: comoTextoSeguro(h.updated_at,40)||ahoraISO() };
-  }, TOPE);
+  // C1: los 12 saneadores por colección viven en SANEADOR_ITEM (una sola definición, ver arriba),
+  // reutilizada también por fusionarPorId() al fusionar el remoto de GitHub — ya no hay dos copias
+  // de la misma validación que puedan divergir con el tiempo.
+  d.viajes = limpiarLista(bruto.viajes, SANEADOR_ITEM.viajes, TOPE);
+  d.cargas = limpiarLista(bruto.cargas, SANEADOR_ITEM.cargas, TOPE);
+  d.gastos = limpiarLista(bruto.gastos, SANEADOR_ITEM.gastos, TOPE);
+  d.plantillas_viaje = limpiarLista(bruto.plantillas_viaje, SANEADOR_ITEM.plantillas_viaje, 2000);
+  d.neumaticos_historico = limpiarLista(bruto.neumaticos_historico, SANEADOR_ITEM.neumaticos_historico, TOPE);
+  d.mantenimiento = limpiarLista(bruto.mantenimiento, SANEADOR_ITEM.mantenimiento, TOPE);
+  d.documentos = limpiarLista(bruto.documentos, SANEADOR_ITEM.documentos, TOPE);
+  d.recordatorios = limpiarLista(bruto.recordatorios, SANEADOR_ITEM.recordatorios, 2000);
+  d.accesorios = limpiarLista(bruto.accesorios, SANEADOR_ITEM.accesorios, TOPE);
+  d.planes = limpiarLista(bruto.planes, SANEADOR_ITEM.planes, 2000);
+  d.favoritos = limpiarLista(bruto.favoritos, SANEADOR_ITEM.favoritos, 2000);
+  d.bateria_historico = limpiarLista(bruto.bateria_historico, SANEADOR_ITEM.bateria_historico, TOPE);
 
   if(rechazados>0) avisos.push(rechazados+' elemento(s) se han descartado por no tener un formato válido.');
   return { datos: normalizarDatos(d), avisos: avisos, validos: d.viajes.length+d.cargas.length+d.gastos.length+d.recordatorios.length+d.accesorios.length+d.planes.length+d.favoritos.length+d.bateria_historico.length, rechazados: rechazados };
@@ -1222,6 +1309,14 @@ function moverAPapelera(coleccion, item){
 // cualquier tumba que pudiera existir en cualquier dispositivo — así la restauración se propaga de
 // verdad en la siguiente sincronización, sin importar cuántos dispositivos tengan la tumba.
 function restaurarDePapelera(coleccion, id){
+  if(esBusiness(coleccion) && !legacyBusinessPermitido()){
+    return mutacionBusiness(coleccion, 'restore:'+id, null, async function(repo){
+      var restored = await repo.restaurar(id);
+      guardarPapelera(cargarPapelera().filter(function(p){ return !(p.coleccion===coleccion && p.id===id); }));
+      registrarCambio(coleccion, 'restaurar', textoResumenCambio(coleccion, restored));
+      return true;
+    });
+  }
   var lista = cargarPapelera();
   var entrada = lista.find(function(p){ return p.coleccion===coleccion && p.id===id; });
   if(!entrada || !DATOS[coleccion]) return false;
@@ -1249,8 +1344,8 @@ function toastDeshacer(msg, coleccion, id, renderFns){
   el.setAttribute('role','status'); el.setAttribute('aria-live','polite');
   el.classList.add('on','con-accion');
   btn.style.display = '';
-  btn.onclick = function(){
-    if(restaurarDePapelera(coleccion, id)){
+  btn.onclick = async function(){
+    if(await restaurarDePapelera(coleccion, id)){
       (renderFns||[]).forEach(function(fn){ fn(); });
       toast('Restaurado');
     }
@@ -1284,11 +1379,11 @@ var RENDER_TRAS_RESTAURAR = {
   documentos: function(){ renderDocumentos(); },
   bateria_historico: function(){ renderBateria(); renderDashboard(); }
 };
-document.addEventListener('click', function(e){
+document.addEventListener('click', async function(e){
   var restaurar = e.target.closest('[data-restaurar-papelera]');
   if(restaurar){
     var partes = restaurar.dataset.restaurarPapelera.split('|');
-    if(restaurarDePapelera(partes[0], partes[1])){
+    if(await restaurarDePapelera(partes[0], partes[1])){
       (RENDER_TRAS_RESTAURAR[partes[0]]||function(){})();
       renderPapelera();
       toast('Restaurado');
@@ -1383,10 +1478,15 @@ function descargarDatosCorruptos(){
   a.click();
 }
 var DATOS = cargarDatos();
+var frontendAuthority = null;
+var frontendReady = false;
+var frontendStartupPromise = null;
+var businessPendiente = Object.create(null);
 function guardarDatos(sinAutoSync){
+  if(backendCanonicalConfigurado() && !frontendReady) return;
   try{
     DATOS.device_id = idDispositivo();
-    localStorage.setItem('mitesla-datos', JSON.stringify(DATOS));
+    localStorage.setItem('mitesla-datos', JSON.stringify(datosParaPersistenciaLocal(DATOS)));
   }catch(e){
     if(typeof toast==='function') toast('No se pudo guardar: almacenamiento local lleno. Descarga una copia de seguridad.', true);
     return;
@@ -1439,6 +1539,66 @@ function resumenCosteCargas(cargas){
 /** Suma simple del coste conocido de una lista de cargas (nunca cuenta las desconocidas como 0) —
  *  para los sitios que solo necesitan el número, no todo el desglose de resumenCosteCargas(). */
 function sumaCosteConocido(cargas){ return resumenCosteCargas(cargas).costeConocido || 0; }
+
+/* ---------- B13 (FASE B) — Reconciliación de facturas de Supercharger ----------
+ * Tesla no expone las facturas de Supercharger por la Fleet API pública (viven en el área de
+ * cliente de Tesla, con otro sistema de autenticación) — automatizarlo del todo requeriría un
+ * scraping no oficial y fácil de romper, así que en vez de eso esto es una reconciliación MANUAL
+ * asistida: el usuario introduce el importe/fecha reales de la factura (PDF/email de Tesla) y esta
+ * función busca, entre las cargas ya registradas de tipo "supercharger", cuáles encajan en el
+ * tiempo — nunca aplica un emparejamiento sin que el usuario lo confirme explícitamente.
+ *
+ * NORMA SOBRE CORRECCIONES MANUALES: una vez reconciliada, la carga queda con cost_source
+ * "facturado" y factura_reconciliada=true, y conTimestamps() le da un updated_at nuevo — así, en
+ * fusionarPorId() (sincronización), esta corrección manual siempre gana sobre cualquier versión más
+ * antigua (de otro dispositivo o de un reprocesado automático futuro), tal y como exige la norma.
+ */
+var VENTANA_RECONCILIACION_FACTURA_HORAS = 48; // Tesla puede tardar en emitir la factura tras la carga
+
+/** Candidatas para una factura: solo cargas tipo "supercharger", todavía sin reconciliar, dentro de
+ *  la ventana horaria alrededor de la fecha de la factura. Ordenadas por cercanía en el tiempo (y,
+ *  si la factura trae kWh, también por cercanía de energía) — la más probable primero. Nunca decide
+ *  sola: siempre devuelve candidatas para que el usuario elija, incluso si solo hay una. */
+function candidatosFacturaSupercharger(factura, cargas){
+  if(!factura || typeof factura.fecha!=='string' || !factura.fecha) return [];
+  var fechaFacturaMs = new Date(factura.fecha).getTime();
+  if(isNaN(fechaFacturaMs)) return [];
+  var ventanaMs = VENTANA_RECONCILIACION_FACTURA_HORAS*3600*1000;
+  var candidatas = (cargas||[]).filter(function(c){
+    if(c.tipo!=='supercharger' || c.factura_reconciliada) return false;
+    var fc = new Date(c.fecha).getTime();
+    if(isNaN(fc)) return false;
+    return Math.abs(fc-fechaFacturaMs) <= ventanaMs;
+  }).map(function(c){
+    var diffHoras = Math.abs(new Date(c.fecha).getTime()-fechaFacturaMs)/3600000;
+    var diffKwh = (typeof factura.kwh==='number' && typeof c.kwh==='number') ? Math.abs(c.kwh-factura.kwh) : null;
+    return { carga:c, diffHoras: Math.round(diffHoras*100)/100, diffKwh: diffKwh===null?null:Math.round(diffKwh*100)/100 };
+  });
+  candidatas.sort(function(a,b){
+    // Si la factura trae kWh, la cercanía de energía manda (más fiable que la hora, que puede
+    // llegar con retraso de facturación); si no, solo queda la cercanía temporal.
+    if(a.diffKwh!==null && b.diffKwh!==null && a.diffKwh!==b.diffKwh) return a.diffKwh-b.diffKwh;
+    return a.diffHoras-b.diffHoras;
+  });
+  return candidatas;
+}
+
+/** Aplica la reconciliación: el usuario ya ha elegido a mano cuál de las candidatas es la correcta.
+ *  Nunca se llama automáticamente. Devuelve {ok:false, motivo} si algo no cuadra (norma de datos
+ *  inventados: mejor rechazar que aplicar un coste a la carga equivocada o con un importe inválido). */
+function reconciliarFacturaConCarga(datosApp, cargaId, factura){
+  var carga = (datosApp.cargas||[]).find(function(c){ return c.id===cargaId; });
+  if(!carga) return { ok:false, motivo:'carga_no_encontrada' };
+  if(carga.tipo!=='supercharger') return { ok:false, motivo:'no_es_supercharger' };
+  if(typeof factura.importe!=='number' || !isFinite(factura.importe) || factura.importe<=0) return { ok:false, motivo:'importe_invalido' };
+  carga.total_cost = Math.round(factura.importe*100)/100;
+  carga.cost_source = 'facturado';
+  carga.factura_reconciliada = true;
+  carga.factura_numero = factura.numero || null;
+  carga.factura_fecha = factura.fecha || null;
+  conTimestamps(carga, carga); // updated_at nuevo: esta corrección manual gana en cualquier fusión futura
+  return { ok:true, carga: carga };
+}
 /** Lee un campo de porcentaje opcional (0-100) de un input de texto: vacío -> null (nunca 0 inventado), fuera de rango -> NaN para que lo rechace la validación. */
 function parseOptionalPercentage(texto){
   if(texto===undefined || texto===null || texto==='') return null;
@@ -1600,7 +1760,7 @@ function renderViajes(){
       '<div class="ico viaje" data-icon="ruta"></div>'+
       '<div class="fila-tx" data-editar-viaje="'+v.id+'"><div class="t1">'+esc(v.origen)+' → '+esc(v.destino)+'</div>'+
       '<div class="t2">'+fechaCorta(v.fecha)+' · '+v.duracion_min+' min'+conductorTxt+etiquetaTxt+'</div></div>'+
-      '<div class="fila-r"><div class="r1">'+v.km.toFixed(1)+' km</div><div class="r2">'+fmt1(c,' kWh/100km')+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+fmt1(v.km)+' km</div><div class="r2">'+fmt1(c,' kWh/100km')+'</div></div>'+
       '<button type="button" class="btn-duplicar" data-duplicar-viaje="'+v.id+'" data-icon="duplicar" aria-label="Duplicar"></button>'+
       '<button type="button" class="btn-borrar" data-borrar-viaje="'+v.id+'" data-icon="papelera" aria-label="Eliminar"></button>'+
       '</div>';
@@ -1608,7 +1768,9 @@ function renderViajes(){
 
   aplicarIconos();
 }
+var editandoViajeRevision = null;
 function abrirFormViaje(v){
+  editandoViajeRevision = v ? v.revision : null;
   editandoViaje = v ? v.id : null;
   document.getElementById('fv-fecha').value = v ? v.fecha : '';
   document.getElementById('fv-origen').value = v ? v.origen : '';
@@ -1742,14 +1904,22 @@ function cargarTarifa(){
   try{ return JSON.parse(localStorage.getItem('mitesla-tarifa')) || { valle:0.11, llano:0.16, punta:0.22 }; }
   catch(e){ return { valle:0.11, llano:0.16, punta:0.22 }; }
 }
-function precioSegunHora(fechaISO, tarifa){
+/* B12 (FASE B): antes precioSegunHora decidía el tramo comparando precios ("if h... return
+ * tarifa.valle"), lo que impedía saber POR NOMBRE en qué tramo cae una hora sin arriesgarse a
+ * confundir dos tramos que coincidieran de precio. nombreTramoHora aísla esa decisión (misma
+ * lógica, ningún comportamiento nuevo) para que desglosarCosteSesionPorTramos pueda usarla
+ * directamente en vez de comparar valores numéricos. */
+function nombreTramoHora(fechaISO){
   var d = new Date(fechaISO);
   var dia = d.getDay(); // 0=domingo, 6=sábado
   var h = d.getHours();
-  if(dia===0 || dia===6) return tarifa.valle; // fin de semana siempre valle
-  if(h>=0 && h<8) return tarifa.valle;
-  if((h>=10 && h<14) || (h>=18 && h<22)) return tarifa.punta;
-  return tarifa.llano; // 8-10, 14-18, 22-24
+  if(dia===0 || dia===6) return 'valle'; // fin de semana siempre valle
+  if(h>=0 && h<8) return 'valle';
+  if((h>=10 && h<14) || (h>=18 && h<22)) return 'punta';
+  return 'llano'; // 8-10, 14-18, 22-24
+}
+function precioSegunHora(fechaISO, tarifa){
+  return tarifa[nombreTramoHora(fechaISO)];
 }
 /* ---------- Fase 3, punto 7: sesiones que atraviesan varios periodos tarifarios ----------
  * Cuando una carga doméstica tiene fecha de inicio Y fin, en vez de aplicar el precio de una sola
@@ -1774,6 +1944,64 @@ function precioMedioSesion(inicioISO, finISO, tarifa){
     cursor = tramoFin;
   }
   return Math.round((costeAcumulado / totalMin) * 10000) / 10000;
+}
+
+/* ---------- B12 (FASE B): reparto de coste por tramo horario (cargas domésticas largas) ----------
+ * precioMedioSesion ya calculaba un precio medio ponderado cuando una sesión cruza de tramo, pero
+ * solo devolvía ESE número medio — el usuario nunca veía cuánta energía/coste correspondió a cada
+ * tramo. Para una carga doméstica larga (varias horas, típicamente durante la noche) eso puede
+ * ocultar que, por ejemplo, buena parte de la energía se cargó ya en horario llano/punta. Esta
+ * función desglosa la MISMA sesión, tramo a tramo, repartiendo el kWh TOTAL REAL de forma
+ * proporcional al tiempo pasado en cada tramo (nunca inventa un consumo distinto al medido) —
+ * NORMA SOBRE DATOS INVENTADOS: si no hay fecha de fin o kWh válidos, devuelve null, nunca un
+ * desglose con huecos rellenados a ojo. */
+function desglosarCosteSesionPorTramos(inicioISO, finISO, tarifa, kwhTotal){
+  var ini = new Date(inicioISO), fin = new Date(finISO);
+  if(isNaN(ini.getTime()) || isNaN(fin.getTime()) || fin<=ini) return null;
+  if(typeof kwhTotal!=='number' || !isFinite(kwhTotal) || kwhTotal<=0) return null;
+  var totalMin = (fin-ini)/60000;
+  if(totalMin > 48*60) return null; // igual que precioMedioSesion: sesión disparatadamente larga, no fiable
+  var tramosPorNombre = {}; // 'valle'|'llano'|'punta' -> {minutos, precio}
+  var cursor = new Date(ini);
+  while(cursor < fin){
+    var siguienteHora = new Date(cursor); siguienteHora.setMinutes(0,0,0); siguienteHora.setHours(siguienteHora.getHours()+1);
+    var tramoFin = siguienteHora < fin ? siguienteHora : fin;
+    var minutosTramo = (tramoFin - cursor) / 60000;
+    var nombre = nombreTramoHora(cursor.toISOString());
+    if(!tramosPorNombre[nombre]) tramosPorNombre[nombre] = { minutos:0, precio:tarifa[nombre] };
+    tramosPorNombre[nombre].minutos += minutosTramo;
+    cursor = tramoFin;
+  }
+  var resultado = [];
+  ['valle','llano','punta'].forEach(function(nombre){
+    var t = tramosPorNombre[nombre];
+    if(!t) return;
+    var kwhTramo = kwhTotal * (t.minutos / totalMin);
+    resultado.push({
+      tramo: nombre,
+      minutos: Math.round(t.minutos * 100) / 100,
+      precio_kwh: t.precio,
+      kwh: Math.round(kwhTramo * 1000) / 1000,
+      coste: Math.round(kwhTramo * t.precio * 100) / 100
+    });
+  });
+  return resultado;
+}
+var NOMBRE_TRAMO_LARGO = { valle:'Valle', llano:'Llano', punta:'Punta' };
+function renderDesgloseTramos(){
+  var cont = document.getElementById('fc-desglose-tramos');
+  if(!cont) return;
+  var tipo = document.getElementById('fc-tipo').value;
+  var fecha = document.getElementById('fc-fecha').value;
+  var finSesion = document.getElementById('fc-fecha-fin').value;
+  var kwh = parseFloat(document.getElementById('fc-kwh').value);
+  if(tipo!=='domestica' || !fecha || !finSesion || isNaN(kwh)){ cont.innerHTML=''; return; }
+  var desglose = desglosarCosteSesionPorTramos(fecha, finSesion, cargarTarifa(), kwh);
+  if(!desglose || desglose.length<2){ cont.innerHTML=''; return; } // con 1 solo tramo no aporta nada nuevo sobre el precio medio
+  cont.innerHTML = '<div class="sub" style="margin:4px 0 2px">Desglose por tramo horario</div>' +
+    desglose.map(function(t){
+      return '<div class="sub">'+NOMBRE_TRAMO_LARGO[t.tramo]+': '+t.kwh.toFixed(2)+' kWh a '+t.precio_kwh.toFixed(2)+' €/kWh = '+t.coste.toFixed(2)+' €</div>';
+    }).join('');
 }
 
 function renderAjustes(){
@@ -1805,10 +2033,16 @@ function renderAjustes(){
   document.getElementById('gh-repo').value = cfg.repo || '';
   document.getElementById('gh-path').value = cfg.path || 'datos.json';
   document.getElementById('gh-token').value = cfg.token || '';
+  // B25 (FASE B): la sección refleja si GitHub está funcionando como sincronización completa
+  // (todavía sin D1 disponible) o solo como copia de seguridad (D1 ya disponible como canónica).
+  var ghTitulo = document.getElementById('gh-sec-titulo'), ghSub = document.getElementById('gh-sec-sub');
+  var ghSoloBackup = (typeof repositorioD1Disponible === 'function') && repositorioD1Disponible();
+  if(ghTitulo) ghTitulo.textContent = ghSoloBackup ? 'Copia de seguridad en GitHub' : 'Sincronización con GitHub';
+  if(ghSub) ghSub.textContent = ghSoloBackup ? 'D1 ya es la fuente canónica — GitHub solo guarda una copia' : 'Así comparten datos tus dispositivos';
   var tcfg = cargarConfigTesla();
   document.getElementById('tesla-client-id').value = tcfg.clientId || TESLA_CONFIG_POR_DEFECTO.clientId;
   document.getElementById('tesla-backend-url').value = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
-  document.getElementById('tesla-admin-key').value = tcfg.adminKey || '';
+  document.getElementById('tesla-session-token').value = tcfg.sessionToken || '';
   getTeslaConnectionStatus();
   var ultimaSync = localStorage.getItem('mitesla-ultima-sync');
   var syncPendiente = localStorage.getItem('mitesla-sync-pending')==='1';
@@ -2197,8 +2431,11 @@ function renderRecords(){
     var masLargo = DATOS.viajes.reduce(function(a,b){ return b.km>a.km ? b : a; });
     filas.push('<div class="fila"><div class="ico viaje" data-icon="ruta"></div><div class="fila-tx"><div class="t1">Viaje más largo</div><div class="t2">'+esc(masLargo.origen)+' → '+esc(masLargo.destino)+'</div></div><div class="fila-r"><div class="r1">'+masLargo.km.toFixed(1)+' km</div></div></div>');
   }
-  if(DATOS.cargas.length){
-    var cargasConPrecio = DATOS.cargas.map(function(c){ return { c:c, precio:c.precio_kwh }; });
+  // A canonical charge may have no unit price; unknown prices are not records.
+  var cargasConPrecio = DATOS.cargas.filter(function(c){
+    return typeof c.precio_kwh==='number' && isFinite(c.precio_kwh) && c.precio_kwh>=0;
+  }).map(function(c){ return { c:c, precio:c.precio_kwh }; });
+  if(cargasConPrecio.length){
     var barata = cargasConPrecio.reduce(function(a,b){ return b.precio<a.precio ? b : a; });
     var cara = cargasConPrecio.reduce(function(a,b){ return b.precio>a.precio ? b : a; });
     filas.push('<div class="fila"><div class="ico carga" data-icon="rayo"></div><div class="fila-tx"><div class="t1">Carga más barata</div><div class="t2">'+esc(barata.c.lugar)+'</div></div><div class="fila-r"><div class="r1" style="color:var(--ok)">'+barata.precio.toFixed(2)+' €/kWh</div></div></div>');
@@ -2381,14 +2618,14 @@ function renderDashboard(){
     var c = consumoViaje(v);
     return '<div class="fila"><div class="ico viaje" data-icon="ruta"></div>'+
       '<div class="fila-tx"><div class="t1">'+esc(v.origen)+' → '+esc(v.destino)+'</div><div class="t2">'+fechaCorta(v.fecha)+' · '+v.duracion_min+' min</div></div>'+
-      '<div class="fila-r"><div class="r1">'+v.km.toFixed(1)+' km</div><div class="r2">'+fmt1(c,' kWh/100km')+'</div></div></div>';
+      '<div class="fila-r"><div class="r1">'+fmt1(v.km)+' km</div><div class="r2">'+fmt1(c,' kWh/100km')+'</div></div></div>';
   }).join('') || '<div class="vacio"><span class="em">🚗</span><p>Todavía no hay viajes registrados.</p></div>';
 
   var cargas = DATOS.cargas.slice().sort(function(a,b){ return new Date(b.fecha)-new Date(a.fecha); }).slice(0,2);
   document.getElementById('dash-cargas').innerHTML = cargas.map(function(c){
     return '<div class="fila"><div class="ico carga" data-icon="rayo"></div>'+
       '<div class="fila-tx"><div class="t1">'+esc(c.lugar)+'</div><div class="t2">'+fechaCorta(c.fecha)+' · '+fmtBateria(c.bateria_inicial)+' → '+fmtBateria(c.bateria_final)+'</div></div>'+
-      '<div class="fila-r"><div class="r1">'+c.kwh.toFixed(1)+' kWh</div><div class="r2">'+euros(costeCarga(c))+'</div></div></div>';
+      '<div class="fila-r"><div class="r1">'+fmt1(c.kwh)+' kWh</div><div class="r2">'+euros(costeCarga(c))+'</div></div></div>';
   }).join('') || '<div class="vacio"><span class="em">⚡</span><p>Todavía no hay cargas registradas.</p></div>';
 
   aplicarIconos();
@@ -2434,7 +2671,7 @@ function renderCargas(){
       '<div class="ico carga" data-icon="rayo"></div>'+
       '<div class="fila-tx" data-editar-carga="'+c.id+'"><div class="t1">'+esc(c.lugar)+(c.ac_dc?' · '+c.ac_dc:'')+'</div>'+
       '<div class="t2">'+fechaCorta(c.fecha)+' · '+fmtBateria(c.bateria_inicial)+' → '+fmtBateria(c.bateria_final)+(c.red?' · '+esc(c.red):'')+'</div></div>'+
-      '<div class="fila-r"><div class="r1">'+c.kwh.toFixed(1)+' kWh</div><div class="r2">'+euros(coste)+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+fmt1(c.kwh)+' kWh</div><div class="r2">'+euros(coste)+'</div></div>'+
       '<button type="button" class="btn-duplicar" data-duplicar-carga="'+c.id+'" data-icon="duplicar" aria-label="Duplicar"></button>'+
       '<button type="button" class="btn-borrar" data-borrar-carga="'+c.id+'" data-icon="papelera" aria-label="Eliminar"></button>'+
       '</div>';
@@ -2442,7 +2679,9 @@ function renderCargas(){
 
   aplicarIconos();
 }
+var editandoCargaRevision = null;
 function abrirFormCarga(c){
+  editandoCargaRevision = c ? c.revision : null;
   editandoCarga = c ? c.id : null;
   document.getElementById('fc-fecha').value = c ? c.fecha : '';
   document.getElementById('fc-lugar').value = c ? c.lugar : '';
@@ -2462,6 +2701,7 @@ function abrirFormCarga(c){
   document.getElementById('fc-origen-bateria').value = (c && c.origen_energia && c.origen_energia.bateria_pct!=null) ? c.origen_energia.bateria_pct : '';
   document.getElementById('fc-guardar').textContent = c ? 'Guardar cambios' : 'Guardar carga';
   formCarga.classList.remove('form-oculto');
+  renderDesgloseTramos();
 }
 
 /* ---------- Render: Gastos / Economía ---------- */
@@ -3158,7 +3398,7 @@ document.getElementById('fv-cancelar').addEventListener('click', function(){
   formViaje.classList.add('form-oculto');
 });
 document.getElementById('fv-destino').addEventListener('change', aplicarSugerenciaClasificacion);
-document.getElementById('form-viaje').addEventListener('submit', function(e){
+document.getElementById('form-viaje').addEventListener('submit', async function(e){
   e.preventDefault();
   var km = parseFloat(document.getElementById('fv-km').value);
   var fecha = document.getElementById('fv-fecha').value;
@@ -3191,17 +3431,18 @@ document.getElementById('form-viaje').addEventListener('submit', function(e){
     etiqueta: document.getElementById('fv-etiqueta').value,
     conductor: document.getElementById('fv-conductor').value.trim()
   };
-  if(editandoViaje){
-    var v = DATOS.viajes.find(function(x){ return x.id===editandoViaje; });
-    Object.assign(v, datos);
-    registrarCambio('viajes', 'editar', textoResumenCambio('viajes', v));
-  } else {
-    datos.id = 'v'+Date.now();
-    DATOS.viajes.push(datos);
-    registrarCambio('viajes', 'crear', textoResumenCambio('viajes', datos));
-  }
+  var guardado = await mutacionBusiness('viajes', 'form', formViaje, async function(repo){
+    var anterior = editandoViaje ? repo.obtener(editandoViaje) : null;
+    if(editandoViaje && !anterior) throw new Error('El viaje ya no está disponible; tu borrador se conserva.');
+    var draft = Object.assign({}, anterior || {}, datos);
+    if(!anterior) draft.id = 'v'+Date.now();
+    else if(!legacyBusinessPermitido()) draft.revision = editandoViajeRevision;
+    if(!legacyBusinessPermitido() && draft.manual_override===null) draft.manual_override={};
+    return await repo.guardar(draft);
+  });
+  if(!guardado) return; // Keep every input and editing id on 409/network failure.
   avisarSiFechaFutura(fecha);
-  guardarDatos();
+  if(legacyBusinessPermitido()) guardarDatos();
   ['fv-fecha','fv-origen','fv-destino','fv-km','fv-duracion','fv-bini','fv-bfin'].forEach(function(id){ document.getElementById(id).value=''; });
   formViaje.classList.add('form-oculto');
   renderViajes();
@@ -3223,13 +3464,16 @@ document.getElementById('lista-viajes').addEventListener('click', function(e){
   if(manejarToggleMes(e)) return;
   var borrar = e.target.closest('[data-borrar-viaje]');
   if(borrar){
-    confirmarAccion('Eliminar viaje', 'Se borrará este viaje del historial.', function(){
+    confirmarAccion('Eliminar viaje', 'Se borrará este viaje del historial.', async function(){
       var idB = borrar.dataset.borrarViaje;
-      var item = DATOS.viajes.find(function(v){ return v.id===idB; });
-      marcarBorrado('viajes', idB);
-      DATOS.viajes = DATOS.viajes.filter(function(v){ return v.id!==idB; });
-      if(item){ moverAPapelera('viajes', item); registrarCambio('viajes', 'eliminar', textoResumenCambio('viajes', item)); }
-      guardarDatos(); renderViajes(); renderDashboard(); renderEstadisticas();
+      var eliminado = await mutacionBusiness('viajes', 'delete:'+idB, borrar, async function(repo){
+        var item = repo.obtener(idB);
+        await repo.eliminar(idB);
+        if(item) moverAPapelera('viajes', item);
+        return true;
+      });
+      if(!eliminado) return;
+      if(legacyBusinessPermitido()) guardarDatos(); renderViajes(); renderDashboard(); renderEstadisticas();
       toastDeshacer('Viaje eliminado', 'viajes', idB, [renderViajes, renderDashboard, renderEstadisticas]);
     });
     return;
@@ -3335,6 +3579,61 @@ document.getElementById('lista-plantillas').addEventListener('click', function(e
   }
 });
 
+/* ---------- B13: UI de reconciliación de facturas de Supercharger ---------- */
+var formFactura = document.getElementById('form-factura');
+var listaCandidatasFactura = document.getElementById('lista-candidatas-factura');
+document.getElementById('btn-factura-toggle').addEventListener('click', function(){
+  formFactura.classList.toggle('form-oculto');
+  if(formFactura.classList.contains('form-oculto')) listaCandidatasFactura.style.display = 'none';
+});
+document.getElementById('fac-cancelar').addEventListener('click', function(){
+  formFactura.classList.add('form-oculto');
+  listaCandidatasFactura.style.display = 'none';
+});
+formFactura.addEventListener('submit', function(e){
+  e.preventDefault();
+  var fecha = document.getElementById('fac-fecha').value;
+  var importe = parseFloat(document.getElementById('fac-importe').value);
+  var kwhTexto = document.getElementById('fac-kwh').value;
+  var numero = document.getElementById('fac-numero').value.trim();
+  if(!fecha || !isFinite(importe) || importe<=0){ toast('Falta la fecha o el importe de la factura.', true); return; }
+  var factura = { fecha: fecha, importe: importe, numero: numero||null, kwh: kwhTexto!=='' ? parseFloat(kwhTexto) : null };
+  var candidatas = candidatosFacturaSupercharger(factura, DATOS.cargas);
+  if(candidatas.length===0){
+    listaCandidatasFactura.style.display = '';
+    listaCandidatasFactura.innerHTML = '<div class="vacio"><span class="em">🔌</span><p>Ninguna carga de Supercharger sin reconciliar en las '+VENTANA_RECONCILIACION_FACTURA_HORAS+' horas alrededor de esa fecha. Comprueba la fecha o registra antes la carga en el Historial.</p></div>';
+    return;
+  }
+  listaCandidatasFactura.style.display = '';
+  listaCandidatasFactura.innerHTML = candidatas.map(function(cand){
+    var c = cand.carga;
+    return '<div class="fila"><div class="fila-tx"><div class="t1">'+esc(c.lugar)+' · '+c.kwh+' kWh · '+fechaCorta(c.fecha)+'</div>'+
+      '<div class="t2">Coste actual: '+euros(costeCarga(c))+' · a '+cand.diffHoras+' h de la factura'+(cand.diffKwh!==null?(' · Δ'+cand.diffKwh+' kWh'):'')+'</div></div>'+
+      '<div class="fila-r"><button type="button" class="ver" data-vincular-factura="'+c.id+'">Vincular · '+euros(importe)+'</button></div></div>';
+  }).join('');
+  listaCandidatasFactura.querySelectorAll('[data-vincular-factura]').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      var copia = JSON.parse(JSON.stringify(DATOS));
+      var r = reconciliarFacturaConCarga(copia, btn.dataset.vincularFactura, factura);
+      if(!r.ok){ toast('No se pudo reconciliar: '+r.motivo, true); return; }
+      var confirmado = await mutacionBusiness('cargas', 'invoice:'+btn.dataset.vincularFactura, btn, async function(repo){
+        if(!legacyBusinessPermitido() && r.carga.manual_override===null) r.carga.manual_override={};
+        // total_cost is authoritative for invoice reconciliation; avoid an old display alias.
+        delete r.carga.coste_total;
+        return await repo.guardar(r.carga);
+      });
+      if(!confirmado) return;
+      registrarCambio('cargas', 'editar', 'Factura reconciliada: '+textoResumenCambio('cargas', r.carga));
+      guardarDatos();
+      renderCargas(); renderDashboard(); renderEstadisticas();
+      toast('Factura vinculada a la carga de '+esc(r.carga.lugar));
+      formFactura.reset();
+      formFactura.classList.add('form-oculto');
+      listaCandidatasFactura.style.display = 'none';
+    });
+  });
+});
+
 /* ---------- Formulario: nueva/editar carga ---------- */
 var formCarga = document.getElementById('form-carga');
 document.getElementById('btn-add-carga').addEventListener('click', function(){
@@ -3355,7 +3654,13 @@ function sugerirPrecioCasa(){
 document.getElementById('fc-tipo').addEventListener('change', sugerirPrecioCasa);
 document.getElementById('fc-fecha').addEventListener('change', sugerirPrecioCasa);
 document.getElementById('fc-fecha-fin').addEventListener('change', sugerirPrecioCasa);
-document.getElementById('form-carga').addEventListener('submit', function(e){
+// B12 (FASE B): el desglose por tramo horario se recalcula con los mismos disparadores que la
+// sugerencia de precio, más el propio kWh (que sugerirPrecioCasa no necesita pero el desglose sí).
+['fc-tipo','fc-fecha','fc-fecha-fin','fc-kwh'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', renderDesgloseTramos);
+  document.getElementById(id).addEventListener('input', renderDesgloseTramos);
+});
+document.getElementById('form-carga').addEventListener('submit', async function(e){
   e.preventDefault();
   var kwh = parseFloat(document.getElementById('fc-kwh').value);
   var precio = parseFloat(document.getElementById('fc-precio').value);
@@ -3434,17 +3739,19 @@ document.getElementById('form-carga').addEventListener('submit', function(e){
     vehicle_id: DATOS.vehiculo && DATOS.vehiculo.tesla_vin ? DATOS.vehiculo.tesla_vin : null,
     origen_energia: origenEnergia
   };
-  if(editandoCarga){
-    var c = DATOS.cargas.find(function(x){ return x.id===editandoCarga; });
-    Object.assign(c, datos);
-    registrarCambio('cargas', 'editar', textoResumenCambio('cargas', c));
-  } else {
-    datos.id = 'c'+Date.now();
-    DATOS.cargas.push(datos);
-    registrarCambio('cargas', 'crear', textoResumenCambio('cargas', datos));
-  }
+  var guardado = await mutacionBusiness('cargas', 'form', formCarga, async function(repo){
+    var anterior = editandoCarga ? repo.obtener(editandoCarga) : null;
+    if(editandoCarga && !anterior) throw new Error('La carga ya no está disponible; tu borrador se conserva.');
+    var draft = Object.assign({}, anterior || {}, datos);
+    if(!anterior) draft.id = 'c'+Date.now();
+    else if(!legacyBusinessPermitido()) draft.revision = editandoCargaRevision;
+    delete draft.coste_total; // The form calculated a fresh total_cost.
+    if(!legacyBusinessPermitido() && draft.manual_override===null) draft.manual_override={};
+    return await repo.guardar(draft);
+  });
+  if(!guardado) return; // Keep every input and editing id on 409/network failure.
   avisarSiFechaFutura(fecha);
-  guardarDatos();
+  if(legacyBusinessPermitido()) guardarDatos();
   ['fc-fecha','fc-lugar','fc-kwh','fc-precio','fc-bini','fc-bfin','fc-red','fc-potencia','fc-notas','fc-fecha-fin','fc-perdidas','fc-origen-solar','fc-origen-bateria'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('fc-acdc').value = '';
   document.getElementById('fc-coste-origen').value = 'estimado';
@@ -3460,13 +3767,16 @@ document.getElementById('lista-cargas').addEventListener('click', function(e){
   if(manejarToggleMes(e)) return;
   var borrar = e.target.closest('[data-borrar-carga]');
   if(borrar){
-    confirmarAccion('Eliminar carga', 'Se borrará esta carga del historial.', function(){
+    confirmarAccion('Eliminar carga', 'Se borrará esta carga del historial.', async function(){
       var idB = borrar.dataset.borrarCarga;
-      var item = DATOS.cargas.find(function(c){ return c.id===idB; });
-      marcarBorrado('cargas', idB);
-      DATOS.cargas = DATOS.cargas.filter(function(c){ return c.id!==idB; });
-      if(item){ moverAPapelera('cargas', item); registrarCambio('cargas', 'eliminar', textoResumenCambio('cargas', item)); }
-      guardarDatos(); renderCargas(); renderDashboard(); renderBateria(); renderGastos(); renderEstadisticas();
+      var eliminado = await mutacionBusiness('cargas', 'delete:'+idB, borrar, async function(repo){
+        var item = repo.obtener(idB);
+        await repo.eliminar(idB);
+        if(item) moverAPapelera('cargas', item);
+        return true;
+      });
+      if(!eliminado) return;
+      if(legacyBusinessPermitido()) guardarDatos(); renderCargas(); renderDashboard(); renderBateria(); renderGastos(); renderEstadisticas();
       toastDeshacer('Carga eliminada', 'cargas', idB, [renderCargas, renderDashboard, renderBateria, renderGastos, renderEstadisticas]);
     });
     return;
@@ -3511,18 +3821,15 @@ document.getElementById('form-gasto').addEventListener('submit', function(e){
     toast('El importe no puede ser negativo.', true);
     return;
   }
+  // B3 (FASE B): usa el repository layer (expenseRepository) en vez de tocar DATOS.gastos a mano —
+  // esta vista ya no necesita saber cómo se guarda/actualiza un gasto. De paso corrige un hueco real
+  // que tenía este formulario en concreto: los gastos nunca habían pasado por conTimestamps, así que
+  // no llevaban created_at/updated_at (a diferencia del resto de colecciones) y siempre "perdían" en
+  // una fusión multi-dispositivo por el fallback de marcaTiempo a la fecha mínima.
   var datos = { fecha: fecha, categoria: document.getElementById('fg-categoria').value, concepto: concepto, importe: importe };
-  if(editandoGasto){
-    var g = DATOS.gastos.find(function(x){ return x.id===editandoGasto; });
-    Object.assign(g, datos);
-    registrarCambio('gastos', 'editar', textoResumenCambio('gastos', g));
-  } else {
-    datos.id = 'g'+Date.now();
-    DATOS.gastos.push(datos);
-    registrarCambio('gastos', 'crear', textoResumenCambio('gastos', datos));
-  }
+  if(editandoGasto) datos.id = editandoGasto;
+  expenseRepository.guardar(datos);
   avisarSiFechaFutura(fecha);
-  guardarDatos();
   ['fg-fecha','fg-concepto','fg-importe'].forEach(function(id){ document.getElementById(id).value=''; });
   formGasto.classList.add('form-oculto');
   renderGastos();
@@ -3534,11 +3841,8 @@ document.getElementById('lista-gastos').addEventListener('click', function(e){
   if(borrar){
     confirmarAccion('Eliminar gasto', 'Se borrará este gasto del registro.', function(){
       var idB = borrar.dataset.borrarGasto;
-      var item = DATOS.gastos.find(function(g){ return g.id===idB; });
-      marcarBorrado('gastos', idB);
-      DATOS.gastos = DATOS.gastos.filter(function(g){ return g.id!==idB; });
-      if(item){ moverAPapelera('gastos', item); registrarCambio('gastos', 'eliminar', textoResumenCambio('gastos', item)); }
-      guardarDatos(); renderGastos(); renderDashboard();
+      expenseRepository.eliminar(idB);
+      renderGastos(); renderDashboard();
       toastDeshacer('Gasto eliminado', 'gastos', idB, [renderGastos, renderDashboard]);
     });
     return;
@@ -3700,7 +4004,13 @@ function mostrar(nombre){
     renderPlanes();
     cargarClimaYAjustarAutonomia();
     setTimeout(function(){ if(mapaLeaflet) mapaLeaflet.invalidateSize(); }, 80);
+    // B7 (FASE B): lugares D1 (geofences), carga perezosa igual que el resto del mapa.
+    if(typeof cargarLugaresD1==='function') cargarLugaresD1();
   }
+  // B5/B6 (FASE B): se cargan al entrar en la pantalla (no en cada render de la lista manual,
+  // que se repinta mucho más a menudo) — misma idea de carga perezosa que ya usa "mapa" arriba.
+  if(clave === 'viajes' && typeof cargarViajesAutomaticos==='function') cargarViajesAutomaticos();
+  if(clave === 'cargas' && typeof cargarCargasAutomaticas==='function') cargarCargasAutomaticas();
 }
 btns.forEach(function(b){ b.addEventListener('click', function(){ mostrar(b.dataset.vista); }); });
 document.getElementById('lista-mas').addEventListener('click', function(e){
@@ -4002,10 +4312,15 @@ document.getElementById('veh-modelo-select').addEventListener('change', function
 // Client ID: dato público de la app "MiEV" ya registrada ante Tesla, no es secreto.
 var TESLA_CONFIG_POR_DEFECTO = { clientId:'3b8ae070-eec0-4768-8838-edbd897f869d', backendUrl:'https://api.laperestronika.com' };
 function cargarConfigTesla(){
-  try{ return JSON.parse(localStorage.getItem('mitesla-tesla-config')) || {}; }
-  catch(e){ return {}; }
+  try{ var raw=JSON.parse(localStorage.getItem('mitesla-tesla-config'))||{};
+    return {clientId:raw.clientId||'',backendUrl:raw.backendUrl||'',sessionToken:sessionStorage.getItem('mitesla-session:'+String(raw.backendUrl||'').replace(/\/$/,''))||''};
+  }catch(e){return {};}
 }
-function guardarConfigTesla(cfg){ localStorage.setItem('mitesla-tesla-config', JSON.stringify(cfg)); }
+function guardarConfigTesla(cfg){
+ localStorage.setItem('mitesla-tesla-config',JSON.stringify({clientId:cfg.clientId||'',backendUrl:cfg.backendUrl||''}));
+ var key='mitesla-session:'+String(cfg.backendUrl||'').replace(/\/$/,'');
+ if(cfg.sessionToken)sessionStorage.setItem(key,cfg.sessionToken);else sessionStorage.removeItem(key);
+}
 
 var TESLA_ERRORES = {
   not_connected: 'No hay ninguna sesión de Tesla activa. Pulsa "Conectar con Tesla".',
@@ -4015,7 +4330,7 @@ var TESLA_ERRORES = {
   tesla_unavailable: 'Tesla no responde ahora mismo. Se reintentará más tarde.',
   not_found: 'El coche no aparece en tu cuenta de Tesla.',
   sin_vehiculos: 'No hay ningún vehículo en tu cuenta de Tesla.',
-  unauthorized: 'La clave de administración del backend no es correcta.',
+  unauthorized: 'La token de sesión del backend no es correcta.',
   config_incompleta: 'Falta configuración en el backend (revisa las variables de entorno en Cloudflare).',
   respuesta_invalida: 'Tesla ha devuelto una respuesta que no se pudo interpretar.'
 };
@@ -4143,10 +4458,10 @@ function aplicarSnapshotTeslaEnDashboard(){
 }
 document.getElementById('dash-fuente-actualizar').addEventListener('click', function(){
   var cfg = cargarConfigTesla();
-  if(cfg.backendUrl && cfg.adminKey) fetchTeslaVehicle(cfg, true);
+  if(cfg.backendUrl && cfg.sessionToken) fetchTeslaVehicle(cfg, true);
 });
 
-function teslaHeaders(cfg){ return { 'Authorization': 'Bearer ' + (cfg.adminKey||'') }; }
+function teslaHeaders(cfg){ return { 'Authorization': 'Bearer ' + (cfg.sessionToken||'') }; }
 
 async function teslaFetch(cfg, ruta, opciones){
   opciones = opciones || {};
@@ -4167,7 +4482,7 @@ function pintarEstadoTesla(texto, sub, estadoDot, accionesVisibles){
 
 async function getTeslaConnectionStatus(forzar){
   var cfg = cargarConfigTesla();
-  if(!cfg.backendUrl || !cfg.adminKey){
+  if(!cfg.backendUrl || !cfg.sessionToken){
     pintarEstadoTesla('Sin configurar todavía.', '', 'off', false);
     document.getElementById('tesla-selector-vehiculo').style.display = 'none';
     return null;
@@ -4284,11 +4599,11 @@ async function selectTeslaVehicle(vin){
 
 async function connectTesla(){
   var cfg = cargarConfigTesla();
-  if(!cfg.clientId || !cfg.backendUrl || !cfg.adminKey){
-    pintarEstadoTesla('Falta el Client ID, la URL del backend o la clave de administración.', '', 'err', false);
+  if(!cfg.clientId || !cfg.backendUrl || !cfg.sessionToken){
+    pintarEstadoTesla('Falta el Client ID, la URL del backend o la token de sesión.', '', 'err', false);
     return;
   }
-  // FASE A (A11, auditoría externa 2026-09-20): el ADMIN_TOKEN ya NO viaja en la URL de
+  // FASE A (A11, auditoría externa 2026-09-20): el token de sesión no viaja en la URL de
   // navegación (quedaba en el historial del navegador y en logs de acceso del backend). Primero
   // se pide un token de un solo uso y corta vida por una petición autenticada normal (cabecera
   // Authorization), y solo ESE token va en la URL a la que se navega.
@@ -4307,7 +4622,7 @@ async function connectTesla(){
 
 async function disconnectTesla(){
   var cfg = cargarConfigTesla();
-  if(!cfg.backendUrl || !cfg.adminKey) return;
+  if(!cfg.backendUrl || !cfg.sessionToken) return;
   confirmarAccion('Desconectar Tesla', 'Se olvidará la sesión guardada en el backend. Podrás volver a conectar cuando quieras.', async function(){
     try{
       await teslaFetch(cfg, '/desconectar', { method:'POST' });
@@ -4322,7 +4637,7 @@ document.getElementById('tesla-guardar-config').addEventListener('click', functi
   var cfg = {
     clientId: document.getElementById('tesla-client-id').value.trim(),
     backendUrl: document.getElementById('tesla-backend-url').value.trim().replace(/\/$/,''),
-    adminKey: document.getElementById('tesla-admin-key').value.trim()
+    sessionToken: document.getElementById('tesla-session-token').value.trim()
   };
   guardarConfigTesla(cfg);
   teslaCache = { en:0, estado:null, vehiculo:null, snapshot:null, last_fetch:null, last_success:null, last_error:null, enCurso:null };
@@ -4334,7 +4649,7 @@ document.getElementById('tesla-conectar').addEventListener('click', function(){
   var cfg = {
     clientId: document.getElementById('tesla-client-id').value.trim(),
     backendUrl: document.getElementById('tesla-backend-url').value.trim().replace(/\/$/,''),
-    adminKey: document.getElementById('tesla-admin-key').value.trim()
+    sessionToken: document.getElementById('tesla-session-token').value.trim()
   };
   guardarConfigTesla(cfg);
   connectTesla();
@@ -5077,11 +5392,14 @@ document.getElementById('notif-activar').addEventListener('click', async functio
   }
   actualizarEstadoNotificaciones();
 });
-/* Fase 3, punto 19: Web Push — categorías, dedupe/cooldown y suscripción real (pendiente de backend). */
+/* Fase 3 / B16: Web Push — categorías, dedupe/cooldown y suscripción real (envío real desde el
+ * backend, ver worker.js: enviarPushesAlertasPendientes). tpms_baja se añadió en B16 — el motor de
+ * alertas del Worker (Fase 4E) ya generaba avisos de presión de neumáticos, pero no tenían todavía
+ * su propia categoría en este catálogo para poder desactivarlos sin desactivar Web Push entero. */
 var PUSH_CATEGORIAS = {
   carga_umbral: 'Carga alcanza un % objetivo', carga_termina: 'Carga terminada', carga_interrumpida: 'Carga interrumpida',
   bateria_baja: 'Batería baja', seguro: 'Renovación de seguro', itv: 'ITV próxima', mantenimiento: 'Mantenimiento pendiente',
-  sync_fallida: 'Sincronización fallida', anomalia: 'Anomalía importante'
+  sync_fallida: 'Sincronización fallida', anomalia: 'Anomalía importante', tpms_baja: 'Presión de neumático baja'
 };
 function cargarCategoriasPush(){
   try{ return Object.assign({}, Object.fromEntries(Object.keys(PUSH_CATEGORIAS).map(function(k){return [k,true];})), JSON.parse(localStorage.getItem('mitesla-push-categorias'))||{}); }
@@ -5099,24 +5417,85 @@ function debeNotificarConCooldown(clave, cooldownMin){
   localStorage.setItem(almacenKey, ahoraISO());
   return true;
 }
-/** Punto 19: intenta suscribir el dispositivo a Web Push real. Requiere (a) el flag web_push
- *  activo, (b) una clave pública VAPID configurada, y (c) un backend que reciba y guarde la
- *  suscripción — ninguno de los dos últimos está configurado en este proyecto todavía, así que
- *  esto se detiene con un mensaje claro en vez de intentar suscribirse con una clave inexistente
- *  (lo que solo produciría un error críptico del navegador). Pasos exactos para activarlo de
- *  verdad quedan en el informe final de la Fase 3. */
-var WEB_PUSH_VAPID_PUBLIC_KEY = ''; // PENDIENTE: rellenar con la clave pública VAPID del backend de push cuando exista
+/** Punto 19 / B16 (FASE B): suscribe el dispositivo a Web Push real y guarda la suscripción en el
+ *  backend (POST /push/suscribir, worker.js), incluyendo las categorías activas del dispositivo.
+ *  Requiere (a) el flag web_push activo, (b) una clave pública VAPID (desde B16 se trae sola desde
+ *  el backend — ver sincronizarClaveVapid — pero se puede seguir pegando a mano en "Ajustes" si se
+ *  prefiere), y (c) el backend/sessionToken ya configurados en "Conexión Tesla" (mismos que usa
+ *  probarConexionD1). Desde B16 el ENVÍO real de un push (firma VAPID + cifrado RFC 8291) también
+ *  es real: lo hace el Worker por Cron Trigger (enviarPushesAlertasPendientes, worker.js) en cuanto
+ *  el motor de alertas (Fase 4E) genera un aviso nuevo. */
+function vapidPublicKeyConfigurada(){
+  var el = document.getElementById('push-vapid-key');
+  return (el && el.value.trim()) || '';
+}
+/** B16: trae la clave pública VAPID del backend (GET /push/vapid-clave-publica) y la deja escrita
+ *  en el campo de "Ajustes → Notificaciones" SOLO si estaba vacío — nunca pisa una clave que el
+ *  usuario haya pegado a mano. Silencioso ante cualquier fallo (sin backend configurado todavía,
+ *  sin red, etc.): el campo simplemente se queda vacío y el flujo manual de siempre sigue intacto. */
+async function sincronizarClaveVapid(){
+  var el = document.getElementById('push-vapid-key');
+  if(!el || el.value.trim()) return; // ya hay una clave (manual o ya sincronizada antes): nunca se sobrescribe
+  var tcfg = cargarConfigTesla();
+  var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
+  if(!backendUrl || !tcfg.sessionToken) return;
+  try{
+    var res = await fetch(backendUrl.replace(/\/$/,'')+'/push/vapid-clave-publica', {
+      headers:{ 'Authorization':'Bearer '+tcfg.sessionToken }
+    });
+    if(!res.ok) return;
+    var body = await res.json().catch(function(){ return null; });
+    if(body && typeof body.public_key==='string' && body.public_key && !el.value.trim()){
+      el.value = body.public_key;
+      var estadoEl = document.getElementById('push-estado');
+      if(estadoEl && estadoEl.textContent.indexOf('Pega antes')!==-1) estadoEl.textContent = 'Toca para activarlas';
+    }
+  }catch(e){ /* sin red, o backend caído: el campo se queda vacío, no rompe el resto de Ajustes */ }
+}
+/** B16: sincroniza las preferencias de categoría del dispositivo con el backend (POST
+ *  /push/categorias), sin tener que volver a suscribirse. Best-effort y silencioso: si el
+ *  dispositivo todavía no estaba suscrito, el backend simplemente no actualiza nada (0 filas) y
+ *  aquí no se muestra ningún error — las categorías locales (localStorage) son la fuente de verdad
+ *  para el propio dispositivo en cualquier caso. */
+async function sincronizarCategoriasPushConBackend(categorias){
+  var tcfg = cargarConfigTesla();
+  var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
+  if(!backendUrl || !tcfg.sessionToken) return;
+  try{
+    await fetch(backendUrl.replace(/\/$/,'')+'/push/categorias', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ device_id: idDispositivo(), categorias: categorias })
+    });
+  }catch(e){ /* best-effort: sin red o backend caído, se reintentará solo la próxima vez que cambie algo */ }
+}
 async function activarWebPush(){
   if(!featureActiva('web_push')) return { ok:false, motivo:'flag_desactivado' };
-  if(!WEB_PUSH_VAPID_PUBLIC_KEY){ return { ok:false, motivo:'sin_vapid_key' }; }
+  var vapidKey = vapidPublicKeyConfigurada();
+  if(!vapidKey){ return { ok:false, motivo:'sin_vapid_key' }; }
   if(!('serviceWorker' in navigator) || !('PushManager' in window)) return { ok:false, motivo:'sin_soporte_navegador' };
   var permiso = Notification.permission==='granted' ? 'granted' : await Notification.requestPermission();
   if(permiso!=='granted') return { ok:false, motivo:'permiso_denegado' };
   try{
     var reg = await navigator.serviceWorker.ready;
-    var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: WEB_PUSH_VAPID_PUBLIC_KEY });
-    // PENDIENTE: enviar `sub` (endpoint + claves) al backend de push para que pueda usarla luego.
-    // No hay endpoint configurado todavía — se deja preparado el punto exacto donde iría ese POST.
+    var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: vapidKey });
+    var tcfg = cargarConfigTesla();
+    var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
+    if(backendUrl && tcfg.sessionToken){
+      var sj = sub.toJSON ? sub.toJSON() : sub;
+      try{
+        var res = await fetch(backendUrl.replace(/\/$/,'')+'/push/suscribir', {
+          method:'PUT',
+          headers:{ 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
+          body: JSON.stringify({ device_id: idDispositivo(), endpoint: sj.endpoint, keys: sj.keys, categorias: cargarCategoriasPush() })
+        });
+        if(!res.ok) return { ok:true, suscripcion: sub, avisoBackend:'El navegador se suscribió, pero el backend no pudo guardar la suscripción (HTTP '+res.status+').' };
+      }catch(e){
+        return { ok:true, suscripcion: sub, avisoBackend:'El navegador se suscribió, pero no se pudo contactar con el backend para guardarla: '+e.message };
+      }
+    } else {
+      return { ok:true, suscripcion: sub, avisoBackend:'El navegador se suscribió, pero falta configurar la URL del backend y la token de sesión en "Conexión Tesla" para guardar la suscripción.' };
+    }
     return { ok:true, suscripcion: sub };
   }catch(e){
     return { ok:false, motivo:'error_suscripcion', detalle:String(e) };
@@ -5129,11 +5508,14 @@ if('serviceWorker' in navigator){
 }
 function renderCategoriasPush(){
   var filaPush = document.getElementById('fila-web-push');
+  var filaVapid = document.getElementById('fila-web-push-vapid');
   var cont = document.getElementById('lista-categorias-push');
   var activo = featureActiva('web_push');
   if(filaPush) filaPush.style.display = activo ? '' : 'none';
+  if(filaVapid) filaVapid.style.display = activo ? '' : 'none';
   if(cont) cont.style.display = activo ? '' : 'none';
   if(!activo || !cont) return;
+  if(!vapidPublicKeyConfigurada()) sincronizarClaveVapid().then(function(){ /* si trae una clave, la deja escrita en el campo; no hace falta re-render aquí */ });
   var cat = cargarCategoriasPush();
   cont.innerHTML = Object.keys(PUSH_CATEGORIAS).map(function(k){
     return '<div class="fila"><div class="fila-tx"><div class="t1">'+esc(PUSH_CATEGORIAS[k])+'</div></div>'+
@@ -5144,19 +5526,20 @@ function renderCategoriasPush(){
       var actuales = cargarCategoriasPush();
       actuales[chk.dataset.catPush] = chk.checked;
       guardarCategoriasPush(actuales);
+      sincronizarCategoriasPushConBackend(actuales); // B16: refleja el cambio en el backend sin re-suscribirse
     });
   });
   var estadoEl = document.getElementById('push-estado');
   if(estadoEl){
-    estadoEl.textContent = WEB_PUSH_VAPID_PUBLIC_KEY
+    estadoEl.textContent = vapidPublicKeyConfigurada()
       ? (Notification.permission==='granted' ? 'Activadas' : 'Toca para activarlas')
-      : 'Pendiente de configurar un backend de push (clave VAPID) — ver informe de la Fase 3';
+      : 'Pega la clave pública VAPID arriba, o configura backend+clave en "Conexión Tesla" para traerla sola';
   }
 }
 document.getElementById('push-activar').addEventListener('click', async function(){
   var r = await activarWebPush();
-  if(r.ok){ toast('Notificaciones push activadas'); }
-  else if(r.motivo==='sin_vapid_key'){ toast('Falta configurar el backend de Web Push (clave VAPID) — ver informe de la Fase 3.', true); }
+  if(r.ok){ toast(r.avisoBackend ? r.avisoBackend : 'Notificaciones push activadas', !!r.avisoBackend); }
+  else if(r.motivo==='sin_vapid_key'){ toast('Falta la clave pública VAPID — configura backend+clave en "Conexión Tesla" para traerla sola, o pégala a mano arriba.', true); }
   else if(r.motivo==='permiso_denegado'){ toast('Permiso de notificaciones denegado.', true); }
   else { toast('No se pudo activar Web Push ahora mismo.', true); }
   renderCategoriasPush();
@@ -5284,8 +5667,24 @@ function marcaTiempo(x){ return (x && (x.updated_at||x.created_at)) || '0000-00-
  *  elemento, y un borrado posterior a la última edición prevalece, tanto si
  *  vino de este dispositivo como del remoto. En empate exacto, gana la
  *  edición (nunca se pierde un dato por un empate de reloj). */
-function fusionarPorId(remotoArr, localArr, borradosRemoto, borradosLocal){
-  var remotoPorId = {}; (remotoArr||[]).forEach(function(x){ if(x && x.id) remotoPorId[x.id]=x; });
+// C1 (FASE C): `saneador`, cuando se pasa, se aplica a cada entidad REMOTA antes de considerarla
+// para la fusión — el mismo saneador por colección que usa sanearImportacion() (SANEADOR_ITEM,
+// definido junto a idSeguro()/comoTextoSeguro()). Lo local NUNCA se sanea aquí: ya es de confianza
+// (nace de los propios formularios de esta app, o ya pasó por este mismo saneador si llegó por
+// importación) y algunas colecciones (p. ej. "planes") conservan campos libres con Object.assign
+// que un saneado agresivo del lado local podría recortar sin necesidad. Lo remoto SÍ es un límite
+// de confianza real: un datos.json de GitHub puede venir de un repositorio comprometido, compartido
+// con otra persona, o simplemente editado a mano — antes se fusionaba tal cual, y su `id` se usaba
+// sin escapar en decenas de atributos HTML (data-editar-viaje="'+v.id+'", etc.), lo que abría una
+// inyección de HTML/atributo real si ese id contenía comillas/ángulos. idSeguro() ya se ocupaba de
+// esto al IMPORTAR un .json a mano; aquí se cierra el mismo hueco para la sincronización con GitHub.
+function fusionarPorId(remotoArr, localArr, borradosRemoto, borradosLocal, saneador){
+  var remotoPorId = {};
+  (remotoArr||[]).forEach(function(x){
+    if(!x || typeof x!=='object') return;
+    var limpio = saneador ? saneador(x) : x;
+    if(limpio && limpio.id) remotoPorId[limpio.id]=limpio;
+  });
   var localPorId = {}; (localArr||[]).forEach(function(x){ if(x && x.id) localPorId[x.id]=x; });
   var todosIds = {};
   Object.keys(remotoPorId).forEach(function(id){ todosIds[id]=true; });
@@ -5335,7 +5734,7 @@ function fusionarDatos(remotoOriginal, local){
   var colecciones = {};
   var borrados = {};
   COLECCIONES_SYNC.forEach(function(col){
-    var f = fusionarPorId(remoto[col], local[col], bR[col], bL[col]);
+    var f = fusionarPorId(remoto[col], local[col], bR[col], bL[col], SANEADOR_ITEM[col]);
     colecciones[col] = f.lista;
     borrados[col] = f.borrados;
   });
@@ -5393,11 +5792,11 @@ async function probarConexionD1(){
   var tcfg = cargarConfigTesla();
   var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
   if(!backendUrl){ estadoD1('Configura antes la URL del backend en "Conexión Tesla".', 'off'); return; }
-  if(!tcfg.adminKey){ estadoD1('Falta la clave de administración (misma que usa "Conexión Tesla").', 'off'); return; }
+  if(!tcfg.sessionToken){ estadoD1('Falta la token de sesión (misma que usa "Conexión Tesla").', 'off'); return; }
   estadoD1('Probando conexión…', 'busy');
   try{
     var res = await fetch(backendUrl.replace(/\/$/,'')+'/d1/datos?device_id='+encodeURIComponent(idDispositivo()), {
-      headers: { 'Authorization': 'Bearer '+tcfg.adminKey }
+      headers: { 'Authorization': 'Bearer '+tcfg.sessionToken }
     });
     var cuerpo = await res.json().catch(function(){ return null; });
     if(res.status===501 && cuerpo && cuerpo.error==='d1_no_configurado'){
@@ -5414,6 +5813,1120 @@ async function probarConexionD1(){
   }
 }
 document.getElementById('btn-probar-d1').addEventListener('click', probarConexionD1);
+
+/* ---------- FASE B1 — Capa base de repositorio (DISEÑO + CAPA BASE, sin migrar pantallas) ----------
+ * Encargo B1 completo: "D1 como fuente canónica, PWA como caché/offline, GitHub como backup
+ * opcional" — un rediseño total de dónde vive cada dato. Ese rediseño es demasiado grande y
+ * arriesgado para cerrarlo de golpe sin verificar cada pantalla (Dashboard/Viajes/Stats/Economía/
+ * búsqueda/Informe/Wrapped/Backup dependen hoy todas de DATOS/localStorage directamente). Con el
+ * usuario se acordó este alcance para este incremento: "Diseño + capa base, sin migrar todavía" —
+ * construir y probar de verdad una capa de acceso a datos (RepositorioDatos) que lee/escribe en D1
+ * cuando está disponible y si no cae a localStorage, DETRÁS del flag "d1_sync", SIN tocar ninguna
+ * pantalla existente todavía. cargarDatos()/guardarDatos() siguen exactamente igual que antes —
+ * cero cambio de comportamiento visible en esta entrega. Migrar las pantallas a usar este
+ * repositorio, y sustituir el blob único por almacenamiento granular por colección en D1, queda
+ * PENDIENTE explícitamente para una sesión futura (no es una simulación de estar "hecho").
+ *
+ * Reutiliza los mismos endpoints /d1/datos (GET) y /d1/sync (PUT) que ya usa probarConexionD1 —
+ * no se inventan rutas de backend nuevas para este incremento.
+ */
+function repositorioD1Disponible(){
+  if(!featureActiva('d1_sync')) return false;
+  var tcfg = cargarConfigTesla();
+  var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
+  return !!(backendUrl && tcfg.sessionToken);
+}
+function repositorioD1BackendUrl(){
+  var tcfg = cargarConfigTesla();
+  return (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
+}
+/* Lee el blob completo de datos desde D1 para este dispositivo. Devuelve null si D1 responde
+ * correctamente pero todavía no hay nada guardado (nunca inventa un objeto de datos vacío como si
+ * fuera lo que hay en D1: null="no hay dato ahí" es distinto de un dataset vacío real). Lanza si
+ * hay un error real (D1 no configurado, red caída, credenciales inválidas, timeout) — quien llame
+ * decide si eso significa "usa localStorage en su lugar" o "avisa al usuario", nunca se traga el
+ * error en silencio aquí. */
+async function repositorioD1Leer(fetchImpl){
+  fetchImpl = fetchImpl || fetch;
+  var tcfg = cargarConfigTesla();
+  var res = await fetchImpl(repositorioD1BackendUrl()+'/d1/datos?device_id='+encodeURIComponent(idDispositivo()), {
+    headers: { 'Authorization': 'Bearer '+tcfg.sessionToken }
+  });
+  var cuerpo = await res.json().catch(function(){ return null; });
+  if(!res.ok){
+    var err = new Error('repositorioD1Leer: '+res.status+' '+(cuerpo&&cuerpo.error?cuerpo.error:'error_desconocido'));
+    err.status = res.status;
+    throw err;
+  }
+  return (cuerpo && cuerpo.contenido) ? cuerpo.contenido : null;
+}
+/* Escribe el blob completo de datos en D1 para este dispositivo. Igual que arriba: nunca oculta un
+ * fallo real, lanza para que quien llame decida (ver RepositorioDatos.guardar más abajo, que SÍ
+ * decide seguir adelante con localStorage como red de seguridad). */
+async function repositorioD1Guardar(datos, fetchImpl){
+  fetchImpl = fetchImpl || fetch;
+  var authority = await leerAuthorityFrontend(fetchImpl);
+  if(authority==='IMPORTING' || authority==='VERIFYING') throw new Error('migration_locked');
+  if(authority==='CANONICAL') datos = sinBusinessLegacy(datos);
+  var tcfg = cargarConfigTesla();
+  var res = await fetchImpl(repositorioD1BackendUrl()+'/d1/sync', {
+    method: 'PUT',
+    headers: { 'Authorization': 'Bearer '+tcfg.sessionToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: idDispositivo(), datos: datos })
+  });
+  var cuerpo = await res.json().catch(function(){ return null; });
+  if(!res.ok){
+    var err = new Error('repositorioD1Guardar: '+res.status+' '+(cuerpo&&cuerpo.error?cuerpo.error:'error_desconocido'));
+    err.status = res.status;
+    throw err;
+  }
+  return cuerpo;
+}
+/* API pública de la capa base — todavía sin usar por ninguna pantalla (ver comentario de cabecera).
+ * leer(): intenta D1 si está disponible; si D1 falla (no configurado, red, error del servidor) o
+ * está desactivado, cae a localStorage sin más — igual que hace hoy cargarDatos(), nunca lanza.
+ * guardar(datos): SIEMPRE escribe en localStorage primero (la fuente que ya funciona hoy no se
+ * debilita nunca por este incremento) y, si D1 está disponible, intenta también escribir ahí;
+ * un fallo de D1 al guardar se reporta en el resultado (d1Error) pero nunca impide ni deshace el
+ * guardado en localStorage — perder el guardado local por un problema de red sería peor que el
+ * problema que se intenta resolver. */
+var RepositorioDatos = {
+  d1Disponible: repositorioD1Disponible,
+  async leer(fetchImpl){
+    if(repositorioD1Disponible()){
+      try{
+        var datosD1 = await repositorioD1Leer(fetchImpl);
+        if(datosD1) return { datos: datosD1, fuente: 'd1' };
+      }catch(e){ /* cae a localStorage abajo: D1 no es la fuente canónica todavía en esta entrega */ }
+    }
+    var crudo = null;
+    try{ crudo = localStorage.getItem('mitesla-datos'); }catch(e){}
+    return { datos: crudo ? JSON.parse(crudo) : null, fuente: 'localStorage' };
+  },
+  async guardar(datos, fetchImpl){
+    var resultado = { localStorage: false, d1: false, d1Error: null };
+    try{
+      localStorage.setItem('mitesla-datos', JSON.stringify(datosParaPersistenciaLocal(datos)));
+      resultado.localStorage = true;
+    }catch(e){
+      resultado.localStorageError = e.message;
+    }
+    if(repositorioD1Disponible()){
+      try{
+        await repositorioD1Guardar(datos, fetchImpl);
+        resultado.d1 = true;
+      }catch(e){
+        resultado.d1Error = e.message;
+        // B4 (FASE B): el guardado en D1 ha fallado (típicamente, sin conexión) — se encola en el
+        // outbox de IndexedDB para reintentarlo solo en cuanto vuelva la red, en vez de perder el
+        // intento silenciosamente hasta que alguien vuelva a guardar algo a mano.
+        if(typeof outboxEncolarGuardadoD1==='function') await outboxEncolarGuardadoD1(datos);
+      }
+    }
+    return resultado;
+  }
+};
+
+/* ---------- B2 (FASE B): migración segura a D1, con dry-run obligatorio ----------
+ * Antes de escribir nada en D1, analiza lo que la migración REAL haría — reutilizando el mismo
+ * motor de fusión determinista (fusionarPorId/marcaTiempo, el mismo que ya usa GitHub: NORMA de no
+ * duplicar arquitectura) — y lo muestra por colección: insertar/actualizar/conflicto/id inválido
+ * (rechazar)/posible duplicado. Solo tras pulsar "Confirmar migración" se escribe algo, y esa
+ * escritura es literalmente fusionarDatos() + repositorioD1Guardar() — el mismo camino ya probado
+ * del backup a D1 (RepositorioDatos), nunca un segundo algoritmo de fusión nuevo e independiente.
+ * "No perder nada": fusionarDatos() nunca sobrescribe sin fusionar, y en un empate exacto de
+ * timestamp gana la edición sobre el borrado (ver comentario de fusionarPorId).
+ */
+var CLAVE_NATURAL_POR_COLECCION_MIGRACION = {
+  // Solo colecciones donde un duplicado accidental (misma carga/viaje/gasto introducido dos veces
+  // con id distinto, p.ej. por una importación repetida) es detectable de forma fiable por un par
+  // de campos característicos — el resto se omite a propósito para no generar falsos positivos.
+  viajes: function(x){ return (x.fecha||'')+'|'+(x.origen||'')+'|'+(x.destino||'')+'|'+(x.km||''); },
+  cargas: function(x){ return (x.fecha||'')+'|'+(x.lugar||'')+'|'+(x.kwh||''); },
+  gastos: function(x){ return (x.fecha||'')+'|'+(x.concepto||'')+'|'+(x.importe||''); },
+  bateria_historico: function(x){ return (x.fecha||'')+'|'+(x.soc_pct!=null?x.soc_pct:''); }
+};
+function analizarMigracionD1(remoto, local){
+  var r = remoto ? normalizarDatos(JSON.parse(JSON.stringify(remoto))) : null;
+  var bR = (r && r._borrados) || {};
+  var bL = (local && local._borrados) || {};
+  var porColeccion = {};
+  var totales = { insertar:0, actualizar:0, conflicto:0, rechazar:0, duplicar:0 };
+
+  COLECCIONES_SYNC.forEach(function(col){
+    var remotoArr = r ? (r[col]||[]) : [];
+    var localArr = local[col]||[];
+    var remotoPorId = {}; remotoArr.forEach(function(x){ if(x&&x.id) remotoPorId[x.id]=x; });
+    var borradosRemoto = bR[col]||{};
+
+    var detalle = { insertar:[], actualizar:[], conflicto:[], rechazar:[], duplicar:[] };
+
+    localArr.forEach(function(x){
+      if(!x || typeof x!=='object') return;
+      if(!x.id || !ID_SEGURO.test(String(x.id))){ detalle.rechazar.push(x); return; }
+      var enRemoto = remotoPorId[x.id];
+      if(!enRemoto){
+        if(borradosRemoto[x.id] && borradosRemoto[x.id] >= marcaTiempo(x)) return; // ya se borró en remoto después de esta edición local: no aplica
+        detalle.insertar.push(x);
+        return;
+      }
+      if(JSON.stringify(enRemoto)===JSON.stringify(x)) return; // sin cambios, no se cuenta
+      var tLocal = marcaTiempo(x), tRemoto = marcaTiempo(enRemoto);
+      if(tLocal === tRemoto){ detalle.conflicto.push(x); }
+      else if(tLocal > tRemoto){ detalle.actualizar.push(x); }
+      // si lo remoto es más reciente, no hace falta escribir nada para este id: tras fusionar, gana lo remoto.
+    });
+
+    var claveFn = CLAVE_NATURAL_POR_COLECCION_MIGRACION[col];
+    if(claveFn){
+      var vistos = {};
+      localArr.forEach(function(x){
+        if(!x || !x.id) return;
+        var k = claveFn(x);
+        if(!k || /^\|+$/.test(k)) return; // clave vacía (sin campos rellenos): no es una señal fiable de duplicado
+        if(vistos[k]) detalle.duplicar.push(x); else vistos[k]=x;
+      });
+    }
+
+    porColeccion[col] = {
+      insertar: detalle.insertar.length, actualizar: detalle.actualizar.length,
+      conflicto: detalle.conflicto.length, rechazar: detalle.rechazar.length, duplicar: detalle.duplicar.length
+    };
+    Object.keys(totales).forEach(function(k){ totales[k] += porColeccion[col][k]; });
+  });
+
+  return { porColeccion: porColeccion, totales: totales };
+}
+var NOMBRE_COLECCION_MIGRACION = { viajes:'Viajes', cargas:'Cargas', gastos:'Gastos', recordatorios:'Recordatorios', accesorios:'Accesorios', planes:'Planes', favoritos:'Favoritos', bateria_historico:'Batería', plantillas_viaje:'Plantillas de viaje', neumaticos_historico:'Neumáticos', mantenimiento:'Mantenimiento', documentos:'Documentos' };
+var ultimoAnalisisMigracionD1 = null;
+async function analizarYRenderizarMigracionD1(fetchImpl){
+  var cont = document.getElementById('migracion-d1-resultado');
+  var det = document.getElementById('migracion-d1-detalle');
+  var tcfg = cargarConfigTesla();
+  var backendUrl = tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl;
+  if(!backendUrl || !tcfg.sessionToken){ toast('Configura primero la URL del backend y la token de sesión en "Conexión Tesla".', true); return; }
+  cont.style.display=''; det.innerHTML = '<div class="sub">Analizando…</div>';
+  try{
+    var remoto = await repositorioD1Leer(fetchImpl);
+    var analisis = analizarMigracionD1(remoto, DATOS);
+    ultimoAnalisisMigracionD1 = { remoto: remoto, analisis: analisis };
+    var filas = COLECCIONES_SYNC.filter(function(col){
+      var c = analisis.porColeccion[col];
+      return c.insertar||c.actualizar||c.conflicto||c.rechazar||c.duplicar;
+    }).map(function(col){
+      var c = analisis.porColeccion[col];
+      var partes = [];
+      if(c.insertar) partes.push(c.insertar+' nuevo(s)');
+      if(c.actualizar) partes.push(c.actualizar+' se actualizará(n)');
+      if(c.conflicto) partes.push(c.conflicto+' en conflicto');
+      if(c.rechazar) partes.push(c.rechazar+' con id inválido (no se migran)');
+      if(c.duplicar) partes.push(c.duplicar+' posible(s) duplicado(s) (revisar)');
+      return '<div class="sub">'+esc(NOMBRE_COLECCION_MIGRACION[col]||col)+': '+partes.join(', ')+'</div>';
+    }).join('');
+    var t = analisis.totales;
+    det.innerHTML = (filas || '<div class="sub">No hay cambios que migrar: local y D1 ya coinciden.</div>') +
+      (t.conflicto ? '<div class="sub">⚠️ '+t.conflicto+' conflicto(s): mismo registro editado en ambos sitios al mismo tiempo — al confirmar, gana la edición sobre cualquier borrado, pero conviene revisar cuál versión es la correcta.</div>' : '') +
+      (t.rechazar ? '<div class="sub">⚠️ '+t.rechazar+' registro(s) con id no válido no se migrarán tal cual.</div>' : '');
+  }catch(e){
+    det.innerHTML = '<div class="sub">No se pudo leer D1 para analizar: '+esc((e&&e.message)||String(e))+'</div>';
+    ultimoAnalisisMigracionD1 = null;
+  }
+}
+document.getElementById('btn-analizar-migracion-d1').addEventListener('click', function(){ analizarYRenderizarMigracionD1(); });
+document.getElementById('btn-cancelar-migracion-d1').addEventListener('click', function(){
+  document.getElementById('migracion-d1-resultado').style.display='none';
+});
+document.getElementById('btn-confirmar-migracion-d1').addEventListener('click', function(){
+  if(!legacyBusinessPermitido()){ toast('La importación legacy está bloqueada por authority.', true); return; }
+  if(!ultimoAnalisisMigracionD1){ toast('Analiza primero, antes de confirmar.', true); return; }
+  confirmarAccion('Confirmar migración a D1', 'Se fusionarán tus datos locales con lo que ya haya en D1 (nunca se sobrescribe sin fusionar antes) usando el mismo motor de sincronización que ya usa GitHub. ¿Continuar?', function(){
+    var remoto = ultimoAnalisisMigracionD1.remoto || {};
+    var fusion = fusionarDatos(remoto, DATOS);
+    repositorioD1Guardar(fusion).then(function(){
+      DATOS = conservarBusinessCanonical(fusion); guardarDatos(true);
+      document.getElementById('migracion-d1-resultado').style.display='none';
+      toast('Migración a D1 completada');
+      renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
+    }).catch(function(e){
+      toast('Error migrando a D1: '+((e&&e.message)||String(e)), true);
+    });
+  }, 'Confirmar migración');
+});
+
+/* ---------- B3 (FASE B): repository layer en el frontend ----------
+ * "Las vistas no deben saber dónde vive el dato" — un módulo por tipo de entidad con una API CRUD
+ * uniforme (listar/obtener/guardar/eliminar), en vez de que cada pantalla manipule DATOS.viajes con
+ * .push/.filter a mano. Reutiliza EXACTAMENTE los mecanismos ya probados (conTimestamps, papelera,
+ * historial de cambios, guardarDatos) — nunca una segunda forma de guardar un dato.
+ *
+ * ALCANCE HONESTO de este incremento (mismo criterio ya acordado en B1): se entrega la capa base,
+ * real y probada, y se migra un punto de uso real (el formulario de Gastos, ver más abajo) como
+ * demostración de que funciona de extremo a extremo. Migrar TODAS las pantallas existentes (decenas
+ * de puntos que hoy tocan DATOS.viajes/.cargas/... directamente) es un cambio mecánico grande que
+ * merece su propio pase con regresión completa sobre cada pantalla, y queda EXPLÍCITAMENTE
+ * PENDIENTE — no se simula como terminado.
+ * `ruleRepository` (reglas de automatización) y un repositorio de lugares respaldado por D1
+ * (`locations`) quedan fuera a propósito: hoy esos datos viven solo en D1 y ninguna pantalla los
+ * consume todavía (eso es B7/B8, sin empezar) — un repositorio sin ningún dato real detrás sería
+ * decorativo, no una capa de acceso a datos de verdad.
+ */
+function crearRepositorio(coleccion){
+  return {
+    coleccion: coleccion,
+    listar: function(){
+      return (DATOS[coleccion]||[]).slice();
+    },
+    obtener: function(id){
+      return (DATOS[coleccion]||[]).find(function(x){ return claveItemColeccion(coleccion,x)===id; }) || null;
+    },
+    /** Crea (sin id) o actualiza (con id existente) una entidad y devuelve la versión guardada, ya
+     *  con id/timestamps reales. Un único camino de escritura, el mismo que ya usaba cada formulario
+     *  a mano — nunca dos formas distintas de persistir lo mismo. */
+    guardar: function(datos){
+      if(esBusiness(coleccion) && !legacyBusinessPermitido()) throw new Error('canonical_repository_required');
+      if(!DATOS[coleccion]) DATOS[coleccion] = [];
+      var existente = datos.id ? this.obtener(datos.id) : null;
+      var limpio = Object.assign({}, existente, datos);
+      conTimestamps(limpio, existente);
+      desmarcarBorrado(coleccion, limpio.id); // por si se reutiliza un id que había estado borrado
+      if(existente){
+        DATOS[coleccion][DATOS[coleccion].indexOf(existente)] = limpio;
+      } else {
+        DATOS[coleccion].push(limpio);
+      }
+      guardarDatos();
+      registrarCambio(coleccion, existente?'editar':'crear', textoResumenCambio(coleccion, limpio));
+      return limpio;
+    },
+    /** Elimina por id: quita de la colección, deja tumba y manda a la papelera — el mismo camino de
+     *  siempre (nunca un borrado que se salte la papelera o la sincronización). */
+    eliminar: function(id){
+      if(esBusiness(coleccion) && !legacyBusinessPermitido()) throw new Error('canonical_repository_required');
+      var item = this.obtener(id);
+      if(!item) return false;
+      DATOS[coleccion] = DATOS[coleccion].filter(function(x){ return claveItemColeccion(coleccion,x)!==id; });
+      marcarBorrado(coleccion, id);
+      moverAPapelera(coleccion, item);
+      guardarDatos();
+      registrarCambio(coleccion, 'eliminar', textoResumenCambio(coleccion, item));
+      return true;
+    }
+  };
+}
+/* ---------- Micro-Work B: Bridge frontend canónico ----------
+ * API async para viajes/cargas. DATOS es una proyección confirmada; no hay fallback de
+ * escritura local, reintento automático ni outbox ante 409/red. Las pantallas legacy
+ * usan el boundary async de Micro-Work D. No llamar guardarDatos() desde el Bridge.
+ */
+var CAMPOS_BRIDGE = {"viajes": ["started_at", "ended_at", "start_odometer_km", "end_odometer_km", "distance_km", "duration_min", "start_soc_pct", "end_soc_pct", "start_energy_remaining_kwh", "end_energy_remaining_kwh", "energy_used_kwh", "energy_source", "consumption_is_estimated", "start_lat", "start_lng", "end_lat", "end_lng", "start_location_id", "end_location_id", "start_location_raw", "end_location_raw", "outside_temp_start", "outside_temp_end", "classification", "classification_source", "classification_rule_id", "manual_override", "data_quality", "source", "is_shadow", "route_simplified", "weather"], "cargas": ["started_at", "ended_at", "start_soc_pct", "end_soc_pct", "start_odometer_km", "energy_kwh", "energy_source", "charging_current_type", "charger_type", "fast_charger_present", "fast_charger_type", "max_power_kw", "average_power_kw", "power_samples_count", "duration_min", "lat", "lng", "location_id", "total_cost", "cost_source", "price_rule_id", "tesla_invoice_id", "manual_override", "data_quality", "source", "is_shadow"]};
+var MAPA_BRIDGE = {
+  viajes: { fecha:'started_at', km:'distance_km', duracion_min:'duration_min', origen:'start_location_raw', destino:'end_location_raw', bateria_inicial:'start_soc_pct', bateria_final:'end_soc_pct', kwh:'energy_used_kwh' },
+  cargas: { fecha:'started_at', kwh:'energy_kwh', duracion_min:'duration_min', bateria_inicial:'start_soc_pct', bateria_final:'end_soc_pct', odometro_km:'start_odometer_km', coste_total:'total_cost', tipo:'charger_type' }
+};
+function bridgeACanonical(coleccion, datos){
+  var out = {}, mapa = MAPA_BRIDGE[coleccion];
+  CAMPOS_BRIDGE[coleccion].forEach(function(k){
+    if(Object.prototype.hasOwnProperty.call(datos,k)) out[k] = datos[k];
+  });
+  Object.keys(mapa).forEach(function(k){
+    if(Object.prototype.hasOwnProperty.call(datos,k)) out[mapa[k]] = datos[k];
+  });
+  // Campos de presentación sin columna propia: conservarlos en el override manual.
+  var extras = coleccion==='cargas' ? ['lugar','precio_kwh','origen_solar','origen_bateria','fecha_fin','ac_dc','red','potencia_max_kw','perdidas_pct','kwh_red_estimado','data_source','notas','vehicle_id','origen_energia','factura_reconciliada','factura_numero','factura_fecha'] : ['notas','etiqueta','conductor'];
+  extras.forEach(function(k){
+    if(Object.prototype.hasOwnProperty.call(datos,k)){
+      if(out.manual_override === null) throw new Error('manual_override_null_with_legacy_fields');
+      out.manual_override = Object.assign({}, datos.manual_override || {}, out.manual_override || {});
+      out.manual_override[k] = datos[k];
+    }
+  });
+  var tecnicos = ['id','vin','revision','deleted_at','created_at','updated_at'];
+  Object.keys(datos).forEach(function(k){
+    if(!Object.prototype.hasOwnProperty.call(mapa,k) && CAMPOS_BRIDGE[coleccion].indexOf(k)===-1 && extras.indexOf(k)===-1 && tecnicos.indexOf(k)===-1){
+      throw new Error('canonical_unsupported_field: '+k);
+    }
+  });
+  return out;
+}
+function bridgeAProyeccion(coleccion, entity){
+  if(!entity || !entity.id || !Number.isInteger(entity.revision) || entity.revision<1 || !Object.prototype.hasOwnProperty.call(entity,'deleted_at')) throw new Error('invalid_canonical_response');
+  var out = Object.assign({}, entity), mapa = MAPA_BRIDGE[coleccion];
+  Object.keys(mapa).forEach(function(k){
+    if(Object.prototype.hasOwnProperty.call(entity,mapa[k])) out[k] = entity[mapa[k]];
+  });
+  var extras = coleccion==='cargas' ? ['lugar','precio_kwh','origen_solar','origen_bateria','fecha_fin','ac_dc','red','potencia_max_kw','perdidas_pct','kwh_red_estimado','data_source','notas','vehicle_id','origen_energia','factura_reconciliada','factura_numero','factura_fecha'] : ['notas','etiqueta','conductor'];
+  extras.forEach(function(k){
+    if(entity.manual_override && Object.prototype.hasOwnProperty.call(entity.manual_override,k)) out[k] = entity.manual_override[k];
+  });
+  return out;
+}
+function crearRepositorioCanonical(coleccion){
+  var generation = 0;
+  var confirmadas = Object.create(null); // incluye tombstones para rechazar respuestas tardías
+  async function solicitar(sufijo, method, body, fetchImpl){
+    var cfg = cargarConfigTesla(), backend = repositorioD1BackendUrl();
+    if(!backend || !cfg.sessionToken) throw new Error('canonical_not_configured');
+    var res = await (fetchImpl || fetch)(backend+'/canonical/'+coleccion+sufijo, {
+      method:method, cache:'no-store', headers:{ Authorization:'Bearer '+cfg.sessionToken, 'Content-Type':'application/json' },
+      body:body===undefined ? undefined : JSON.stringify(body)
+    });
+    var result = await res.json();
+    if(!res.ok){
+      var error = new Error(result.error || 'canonical_http_error');
+      error.status = res.status; error.code = result.error; error.currentRevision = result.currentRevision; error.current = result.current;
+      throw error;
+    }
+    return result;
+  }
+  function confirmar(entity){
+    var item = bridgeAProyeccion(coleccion, entity), lista = DATOS[coleccion] || [];
+    var anterior = confirmadas[item.id] || lista.find(function(x){ return x.id===item.id; });
+    if(anterior && anterior.revision>item.revision) return JSON.parse(JSON.stringify(anterior));
+    generation++;
+    confirmadas[item.id] = item;
+    DATOS[coleccion] = lista.filter(function(x){ return x.id!==item.id; });
+    if(!item.deleted_at) DATOS[coleccion].push(item);
+    if(typeof guardarCacheCanonical==='function') guardarCacheCanonical();
+    // Cache solamente: no disparar backup, blob sync ni cambios legacy de papelera.
+    if(typeof frontendAuthority==='undefined' || frontendAuthority!=='CANONICAL'){
+      try{ localStorage.setItem('mitesla-datos', JSON.stringify(DATOS)); }catch(e){}
+    }
+    return JSON.parse(JSON.stringify(item));
+  }
+  function revision(id, explicit){
+    var item = (DATOS[coleccion] || []).find(function(x){ return x.id===id; });
+    var value = explicit===undefined ? (confirmadas[id] || item || {}).revision : explicit;
+    if(!Number.isInteger(value) || value<1) throw new Error('canonical_revision_required');
+    return value;
+  }
+  return {
+    coleccion:coleccion,
+    listar:function(){ return JSON.parse(JSON.stringify(DATOS[coleccion] || [])); },
+    obtener:function(id){ return this.listar().find(function(x){ return x.id===id; }) || null; },
+    cargar:async function(vin, fetchImpl){
+      if(!vin) throw new Error('canonical_identity_required');
+      var result = await solicitar('?vin='+encodeURIComponent(vin), 'GET', undefined, fetchImpl);
+      if(!Array.isArray(result[coleccion])) throw new Error('invalid_canonical_response');
+      // Lista limitada por el backend: no interpretar ausencias como borrados.
+      result[coleccion].forEach(function(entity){ bridgeAProyeccion(coleccion, entity); });
+      return result[coleccion].map(confirmar);
+    },
+    refreshAll:async function(vin, fetchImpl, preparar){
+      if(!vin) throw new Error('canonical_identity_required');
+      var startGeneration = generation;
+      var cursor = null, staged = [], seen = Object.create(null), cursors = Object.create(null);
+      do {
+        var result = await solicitar('?vin='+encodeURIComponent(vin)+(cursor ? '&cursor='+encodeURIComponent(cursor) : ''), 'GET', undefined, fetchImpl);
+        if(!Array.isArray(result.items) || !Object.prototype.hasOwnProperty.call(result,'nextCursor')) throw new Error('invalid_canonical_response');
+        result.items.forEach(function(entity){
+          bridgeAProyeccion(coleccion,entity);
+          if(entity.deleted_at || seen[entity.id]) throw new Error('invalid_canonical_page');
+          seen[entity.id] = true; staged.push(entity);
+        });
+        cursor = result.nextCursor;
+        if(cursor !== null && (typeof cursor !== 'string' || !cursor || cursors[cursor])) throw new Error('invalid_canonical_cursor');
+        if(cursor) cursors[cursor] = true;
+      } while(cursor !== null);
+      // Atomic publication: a failed page leaves cache/projection entirely intact.
+      if(generation !== startGeneration) throw new Error('canonical_refresh_superseded');
+      var publicar = function(){
+      if(generation !== startGeneration) throw new Error('canonical_refresh_superseded');
+      generation++;
+      var prior = confirmadas;
+      var next = staged.map(function(entity){
+        var cached = prior[entity.id];
+        return cached && cached.revision>entity.revision ? cached : bridgeAProyeccion(coleccion,entity);
+      }).filter(function(item){ return !item.deleted_at; });
+      confirmadas = Object.create(null);
+      Object.keys(prior).forEach(function(id){ if(prior[id].deleted_at) confirmadas[id]=prior[id]; });
+      next.forEach(function(item){ confirmadas[item.id]=item; });
+      DATOS[coleccion] = next;
+      if(!preparar && (typeof frontendAuthority==='undefined' || frontendAuthority!=='CANONICAL')){ try{ localStorage.setItem('mitesla-datos',JSON.stringify(DATOS)); }catch(e){} }
+      return JSON.parse(JSON.stringify(next));
+      };
+      if(preparar) return { validar:function(){ if(generation !== startGeneration) throw new Error('canonical_refresh_superseded'); }, publicar:publicar };
+      var resultado = publicar();
+      if(typeof guardarCacheCanonical==='function') guardarCacheCanonical();
+      return resultado;
+    },
+    refrescar:async function(id, fetchImpl){
+      var result = await solicitar('/'+encodeURIComponent(id), 'GET', undefined, fetchImpl);
+      return confirmar(result.entity);
+    },
+    guardar:async function(datos, fetchImpl){
+      var existente = datos.id && this.obtener(datos.id);
+      var patch = bridgeACanonical(coleccion, datos), result;
+      if(existente || datos.revision!==undefined){
+        // No completar el patch con la proyección: solo enviar campos editados.
+        if(patch.manual_override && datos.manual_override===undefined && existente && existente.manual_override){
+          patch.manual_override = Object.assign({}, existente.manual_override, patch.manual_override);
+        }
+        result = await solicitar('/'+encodeURIComponent(datos.id), 'PATCH', { expectedRevision:revision(datos.id,datos.revision), patch:patch }, fetchImpl);
+      }else{
+        patch.id = datos.id || nuevoId(); patch.vin = datos.vin || vinAutomatizacion();
+        if(!patch.vin || !patch.started_at) throw new Error('canonical_identity_required');
+        if(patch.source===undefined) patch.source = 'manual';
+        result = await solicitar('', 'POST', patch, fetchImpl);
+      }
+      return confirmar(result.entity);
+    },
+    eliminar:async function(id, expectedRevision, fetchImpl){
+      var result = await solicitar('/'+encodeURIComponent(id), 'DELETE', { expectedRevision:revision(id,expectedRevision) }, fetchImpl);
+      return confirmar(result.entity);
+    },
+    restaurar:async function(id, expectedRevision, fetchImpl){
+      if(expectedRevision===undefined && !confirmadas[id] && !this.obtener(id)){
+        var deleted = await solicitar('/'+encodeURIComponent(id)+'?includeDeleted=true','GET',undefined,fetchImpl);
+        confirmar(deleted.entity);
+      }
+      var result = await solicitar('/'+encodeURIComponent(id)+'/restore', 'POST', { expectedRevision:revision(id,expectedRevision) }, fetchImpl);
+      return confirmar(result.entity);
+    }
+  };
+}
+var tripRepository = crearRepositorioCanonical('viajes');
+var chargeRepository = crearRepositorioCanonical('cargas');
+
+/* ---------- Micro-Work D: authority, startup and UI mutation boundary ---------- */
+function esBusiness(col){ return col==='viajes' || col==='cargas'; }
+function backendCanonicalConfigurado(){
+  var cfg = cargarConfigTesla();
+  return !!(cfg.sessionToken && repositorioD1BackendUrl());
+}
+function legacyBusinessPermitido(){
+  if(frontendAuthority==='CANONICAL') return false;
+  return !backendCanonicalConfigurado() || frontendAuthority==='LEGACY' || frontendAuthority==='PREPARED';
+}
+function conservarBusinessCanonical(datos){
+  if(!legacyBusinessPermitido()){
+    datos.viajes = DATOS.viajes;
+    datos.cargas = DATOS.cargas;
+    datos._borrados = Object.assign({}, datos._borrados);
+    ['viajes','cargas'].forEach(function(col){
+      if(DATOS._borrados && DATOS._borrados[col]) datos._borrados[col] = DATOS._borrados[col];
+      else delete datos._borrados[col];
+    });
+  }
+  return datos;
+}
+function datosParaPersistenciaLocal(datos){
+  if(frontendAuthority!=='CANONICAL') return datos;
+  var persistido;
+  try{ persistido = JSON.parse(localStorage.getItem('mitesla-datos')) || {}; }catch(e){ persistido={}; }
+  var copia = JSON.parse(JSON.stringify(datos));
+  ['viajes','cargas'].forEach(function(col){
+    if(Object.prototype.hasOwnProperty.call(persistido,col)) copia[col]=persistido[col];
+    else delete copia[col];
+  });
+  copia._borrados = Object.assign({}, copia._borrados);
+  ['viajes','cargas'].forEach(function(col){
+    if(persistido._borrados && persistido._borrados[col]) copia._borrados[col]=persistido._borrados[col];
+    else delete copia._borrados[col];
+  });
+  return copia;
+}
+function sinBusinessLegacy(datos){
+  var copia = JSON.parse(JSON.stringify(datos));
+  delete copia.viajes; delete copia.cargas;
+  if(copia._borrados){ delete copia._borrados.viajes; delete copia._borrados.cargas; }
+  return copia;
+}
+async function leerAuthorityFrontend(fetchImpl){
+  var cfg = cargarConfigTesla();
+  var res = await (fetchImpl || fetch)(repositorioD1BackendUrl()+'/canonical/system/authority', {
+    cache:'no-store', headers:{Authorization:'Bearer '+cfg.sessionToken}
+  });
+  var body = await res.json();
+  if(!res.ok || ['LEGACY','PREPARED','IMPORTING','VERIFYING','CANONICAL'].indexOf(body.authority)===-1) throw new Error('authority_unavailable');
+  if(frontendAuthority!==body.authority) frontendReady=false;
+  frontendAuthority = body.authority;
+  return frontendAuthority;
+}
+function identidadCacheCanonical(){ return repositorioD1BackendUrl()+'|'+vinAutomatizacion(); }
+function guardarCacheCanonical(){
+  if(typeof frontendAuthority==='undefined' || frontendAuthority!=='CANONICAL' || !frontendReady) return;
+  try{ localStorage.setItem('mitesla-canonical-confirmed', JSON.stringify({identity:identidadCacheCanonical(), viajes:DATOS.viajes, cargas:DATOS.cargas})); }catch(e){}
+}
+async function iniciarFrontendCanonical(fetchImpl){
+  frontendReady = false;
+  var canonicalPrevio=false;
+  try{
+    var cache = JSON.parse(localStorage.getItem('mitesla-canonical-confirmed'));
+    canonicalPrevio=!!(cache && typeof cache.identity==='string' && Array.isArray(cache.viajes) && Array.isArray(cache.cargas));
+    if(cache && cache.identity===identidadCacheCanonical() && Array.isArray(cache.viajes) && Array.isArray(cache.cargas)){
+      cache.viajes.forEach(function(x){ bridgeAProyeccion('viajes',x); });
+      cache.cargas.forEach(function(x){ bridgeAProyeccion('cargas',x); });
+      DATOS.viajes=cache.viajes.map(function(x){ return bridgeAProyeccion('viajes',x); });
+      DATOS.cargas=cache.cargas.map(function(x){ return bridgeAProyeccion('cargas',x); });
+    }
+  }catch(e){}
+  if(!backendCanonicalConfigurado()){
+    if(canonicalPrevio){ frontendAuthority='CANONICAL'; throw new Error('canonical_not_configured'); }
+    frontendReady=true; return;
+  }
+  var authority = await leerAuthorityFrontend(fetchImpl);
+  if(authority==='CANONICAL'){
+    var vin = vinAutomatizacion();
+    if(!vin && typeof teslaStartupPromise!=='undefined'){
+      await teslaStartupPromise;
+      vin = vinAutomatizacion();
+    }
+    if(!vin) throw new Error('canonical_identity_required');
+    // Both stage without writing DATOS or storage. Validate both before either publishes.
+    var staged = await Promise.all([
+      tripRepository.refreshAll(vin,fetchImpl,true), chargeRepository.refreshAll(vin,fetchImpl,true)
+    ]);
+    if(vin!==vinAutomatizacion()) throw new Error('canonical_identity_changed');
+    staged.forEach(function(x){ x.validar(); });
+    staged.forEach(function(x){ x.publicar(); });
+  }else if(authority!=='LEGACY' && authority!=='PREPARED') throw new Error('migration_locked');
+  frontendReady=true;
+  guardarCacheCanonical();
+}
+async function mutacionBusiness(col, key, control, operacion){
+  var lock = col+':'+key;
+  if(businessPendiente[lock]) return false;
+  if(backendCanonicalConfigurado() && (!frontendReady || !legacyBusinessPermitido() && frontendAuthority!=='CANONICAL')){
+    toast('Espera a completar la lectura canónica antes de guardar.',true); return false;
+  }
+  businessPendiente[lock]=true;
+  var botones = control ? (control.querySelectorAll ? Array.from(control.querySelectorAll('button, input[type=submit]')) : []) : [];
+  if(control && control.tagName==='BUTTON') botones.push(control);
+  var estados = botones.map(function(b){ return b.disabled; });
+  botones.forEach(function(b){ b.disabled=true; });
+  try{
+    if(backendCanonicalConfigurado()){
+      var previous = frontendAuthority;
+      await leerAuthorityFrontend();
+      if(frontendAuthority!==previous){
+        frontendReady=false;
+        throw new Error('authority_changed_reload_required');
+      }
+      if(frontendAuthority!=='CANONICAL' && !legacyBusinessPermitido()) throw new Error('migration_locked');
+    }
+    var repo = legacyBusinessPermitido() ? crearRepositorio(col) : (col==='viajes' ? tripRepository : chargeRepository);
+    return await operacion(repo);
+  }catch(e){
+    toast(e.code==='revision_conflict' ? 'Otro dispositivo modificó este registro. Tu borrador se conserva; vuelve a cargar antes de reintentar.' : 'No se guardó el cambio: '+e.message,true);
+    return false;
+  }finally{
+    delete businessPendiente[lock];
+    botones.forEach(function(b,i){ b.disabled=estados[i]; });
+  }
+}
+
+var expenseRepository = crearRepositorio('gastos');
+var favoriteRepository = crearRepositorio('favoritos'); // favoritos/lugares LOCALES — distinto de "locations" en D1 (B7, sin UI todavía)
+/* Vehículo: no es una colección con id, es un objeto único — mismo estilo de API (obtener/guardar)
+ * para que una vista que solo sepa hablar con "un repositorio" también pueda leer/escribir el
+ * vehículo sin tocar DATOS.vehiculo directamente. */
+var vehicleRepository = {
+  obtener: function(){ return DATOS.vehiculo; },
+  guardar: function(cambios){
+    DATOS.vehiculo = conTimestamps(Object.assign({}, DATOS.vehiculo, cambios), DATOS.vehiculo);
+    guardarDatos();
+    return DATOS.vehiculo;
+  }
+};
+
+/* ---------- B4 (FASE B): offline — outbox en IndexedDB + sync automática al volver online ----------
+ * ALCANCE HONESTO: el encargo pide "IndexedDB preferentemente para datos", es decir, mover el
+ * almacén PRINCIPAL de DATOS de localStorage a IndexedDB. Ese es un cambio de mucho más alcance
+ * (decenas de puntos que hoy llaman a localStorage.getItem/setItem('mitesla-datos') directamente,
+ * incluida la ruta de arranque síncrona) y queda EXPLÍCITAMENTE PENDIENTE para un pase dedicado con
+ * su propia regresión completa — no se simula como hecho aquí.
+ * Lo que SÍ es nuevo y real en este incremento es la otra mitad del punto: un "outbox" que SÍ vive
+ * en IndexedDB (sobrevive a cerrar la pestaña, a diferencia de un simple flag en localStorage) y
+ * encola un guardado en D1 que falló por estar offline, reintentándolo solo — sin que el usuario
+ * tenga que tocar nada — en cuanto el dispositivo recupera conexión.
+ * La sincronización con GitHub YA tenía su propio mecanismo de reintento (mitesla-sync-pending + el
+ * listener 'online' existente, más arriba en este archivo) y no se toca aquí: sigue funcionando
+ * exactamente igual (NO ELIMINES FUNCIONES). Este outbox es aditivo, solo para D1.
+ */
+var OUTBOX_DB_NOMBRE = 'mitesla-outbox';
+var OUTBOX_STORE = 'pendientes';
+function outboxAbrir(){
+  return new Promise(function(resolve, reject){
+    if(!('indexedDB' in window)){ reject(new Error('IndexedDB no disponible en este navegador')); return; }
+    var req = indexedDB.open(OUTBOX_DB_NOMBRE, 1);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if(!db.objectStoreNames.contains(OUTBOX_STORE)) db.createObjectStore(OUTBOX_STORE, { keyPath:'id' });
+    };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error||new Error('outboxAbrir: error desconocido')); };
+  });
+}
+async function outboxEncolar(entrada){
+  if(entrada.tipo==='d1_guardar'){
+    if(!legacyBusinessPermitido()) return {preservado:true};
+    try{
+      var authority = await leerAuthorityFrontend();
+      if(authority!=='LEGACY' && authority!=='PREPARED') return {preservado:true};
+    }catch(e){ return {preservado:true}; }
+  }
+  return outboxAbrir().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(OUTBOX_STORE,'readwrite');
+      tx.objectStore(OUTBOX_STORE).put(entrada);
+      tx.oncomplete = function(){ resolve(); };
+      tx.onerror = function(){ reject(tx.error); };
+    });
+  });
+}
+function outboxListar(){
+  return outboxAbrir().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(OUTBOX_STORE,'readonly');
+      var req = tx.objectStore(OUTBOX_STORE).getAll();
+      req.onsuccess = function(){ resolve(req.result||[]); };
+      req.onerror = function(){ reject(req.error); };
+    });
+  });
+}
+function outboxQuitar(id){
+  return outboxAbrir().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(OUTBOX_STORE,'readwrite');
+      tx.objectStore(OUTBOX_STORE).delete(id);
+      tx.oncomplete = function(){ resolve(); };
+      tx.onerror = function(){ reject(tx.error); };
+    });
+  });
+}
+/** Encola un intento de guardado en D1 que falló (offline o error de red) — SIEMPRE con los datos
+ *  completos en ese momento, nunca un delta parcial, para que un vaciado posterior nunca deje el
+ *  remoto a medias. Una entrada nueva sustituye a la anterior del mismo dispositivo (solo interesa
+ *  el ÚLTIMO estado a reintentar, no un histórico). Best-effort: si el propio outbox falla (p.ej.
+ *  IndexedDB no disponible), se registra el error pero nunca rompe el flujo de guardado normal. */
+function outboxEncolarGuardadoD1(datos){
+  return outboxEncolar({ id:'d1_guardar_'+idDispositivo(), tipo:'d1_guardar', datos:datos, encolado_en:ahoraISO() })
+    .catch(function(e){ console.error('No se pudo encolar el guardado offline en D1', e); });
+}
+/** Vacía el outbox: reintenta cada entrada pendiente contra D1; si tiene éxito, la retira; si sigue
+ *  fallando, se deja para el próximo intento (nunca se descarta un cambio real por un reintento
+ *  fallido). Se llama al recuperar conexión — nunca en el arranque en frío sin red todavía. */
+async function outboxVaciar(fetchImpl){
+  try{
+    if(await leerAuthorityFrontend(fetchImpl)!=='LEGACY' && frontendAuthority!=='PREPARED') return {procesados:0, preservado:true};
+  }catch(e){ return {procesados:0, preservado:true, error:e.message}; }
+  var pendientes;
+  try{ pendientes = await outboxListar(); }catch(e){ return { procesados:0, quedan:0, error:e.message }; }
+  var procesados = 0;
+  for(var i=0;i<pendientes.length;i++){
+    var entrada = pendientes[i];
+    if(entrada.tipo!=='d1_guardar') continue;
+    try{
+      await repositorioD1Guardar(entrada.datos, fetchImpl);
+      await outboxQuitar(entrada.id);
+      procesados++;
+    }catch(e){ /* sigue sin conexión o D1 sigue fallando: se queda en el outbox para el próximo intento */ }
+  }
+  return { procesados: procesados, quedan: (pendientes.length-procesados) };
+}
+window.addEventListener('online', function(){
+  outboxVaciar().then(function(r){
+    if(r && r.procesados) toast('Sincronizado con D1 tras recuperar conexión');
+  }).catch(function(){ /* best-effort */ });
+});
+
+/* ---------- B5/B6 (FASE B) — viajes y cargas AUTOMÁTICOS (telemetría), visibles en la app ----------
+ * El Worker (Fase 4B/4C) ya detecta viajes y sesiones de carga a partir de la telemetría y los
+ * guarda en D1 (`trips`/`charging_sessions`) — hasta ahora nadie los mostraba en ningún sitio de la
+ * app, solo se veían indirectamente vía /pendientes (los que necesitan clasificación o precio).
+ * ALCANCE: se listan en su propia sección "Detectados automáticamente" en Viajes/Cargas, de solo
+ * lectura. NO QUIERO SOLO PARCHES: se ha valorado deliberadamente NO meterlos dentro de
+ * DATOS.viajes/DATOS.cargas (el array editable que alimenta statsViajes/consumoViaje/costeCarga y
+ * la sincronización con GitHub) — históricamente eran dos fuentes de datos distintas (MANUAL vs TESLA_TELEMETRY,
+ * norma "datos Tesla"): forzarlos dentro rompería esas funciones con campos que pueden venir null
+ * (un viaje sin distance_km reventaría fmt1(v.km) en las estadísticas) y arriesgaría duplicar
+ * un viaje que el usuario ya introdujo a mano. Reconciliar/importar uno de estos hacia el historial
+ * editable es una decisión de arquitectura mayor (qué pasa si el usuario lo edita, cómo se detecta
+ * el duplicado…) que este punto no pide — solo pide que sean VISIBLES, y eso es lo que hace este
+ * bloque, con su propio formateo tolerante a datos incompletos (nunca fabrica un "0" o un "—" con
+ * apariencia de dato real). Se excluyen explícitamente los "is_shadow" (modo sombra) — eso ya lo
+ * hace el propio endpoint del Worker. Gateado por el mismo flag "fleet_telemetry" y la misma
+ * configuración (URL + clave) que el resto del panel de Automatización — reutiliza vinAutomatizacion()
+ * y cargarConfigTesla(), nunca duplica esa lógica.
+ */
+var VIAJES_AUTO = { lista: [], cargado: false, error: null };
+var CARGAS_AUTO = { lista: [], cargado: false, error: null };
+var NOMBRE_TIPO_CARGA_AUTO = { supercharger:'Supercharger', domestica:'Casa', publico:'Cargador público', trabajo:'Trabajo', otro:'Otro' };
+function fmtKmAuto(km){ return (typeof km==='number' && isFinite(km)) ? km.toFixed(1)+' km' : '— km'; }
+function fmtMinAuto(min){ return (typeof min==='number' && isFinite(min)) ? Math.round(min)+' min' : '— min'; }
+function fmtKwhAuto(kwh){ return (typeof kwh==='number' && isFinite(kwh)) ? kwh.toFixed(1)+' kWh' : '— kWh'; }
+/** Backend/VIN/flag necesarios para cualquiera de los dos — el mismo criterio que ya usa
+ *  cargarAutomatizacion(), factorizado aquí para no duplicarlo entre viajes y cargas. */
+function contextoTelemetriaAuto(){
+  if(!featureActiva('fleet_telemetry')) return { ok:false, motivo:'Activa "Fleet Telemetry" en Ajustes → Funciones para ver aquí los datos detectados automáticamente.' };
+  var vin = vinAutomatizacion();
+  var tcfg = cargarConfigTesla();
+  var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
+  if(!vin || !backendUrl || !tcfg.sessionToken) return { ok:false, motivo:'Conecta tu Tesla y configura el backend (Ajustes → Conexión Tesla) para ver aquí los datos detectados automáticamente.' };
+  return { ok:true, vin:vin, backendUrl:backendUrl, sessionToken:tcfg.sessionToken };
+}
+async function cargarViajesAutomaticos(fetchImpl){
+  var cont = document.getElementById('lista-viajes-auto');
+  var estado = document.getElementById('viajes-auto-estado');
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ if(cont) cont.innerHTML=''; if(estado) estado.textContent = ctx.motivo; return; }
+  try{
+    var res = await (fetchImpl||fetch)(ctx.backendUrl+'/telemetria/viajes?vin='+encodeURIComponent(ctx.vin), { headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+    if(res.status===501){ if(estado) estado.textContent = 'El Worker todavía no tiene el binding D1 desplegado.'; return; }
+    if(!res.ok){ VIAJES_AUTO.error = 'HTTP '+res.status; if(estado) estado.textContent = 'No se pudieron cargar los viajes automáticos ('+VIAJES_AUTO.error+').'; return; }
+    var body = await res.json();
+    VIAJES_AUTO.lista = (body && body.viajes) || [];
+    VIAJES_AUTO.cargado = true; VIAJES_AUTO.error = null;
+  }catch(e){ VIAJES_AUTO.error = e.message; if(estado) estado.textContent = 'No se pudo contactar con el backend: '+e.message; return; }
+  renderViajesAutomaticos();
+}
+function renderViajesAutomaticos(){
+  var cont = document.getElementById('lista-viajes-auto');
+  var estado = document.getElementById('viajes-auto-estado');
+  if(!cont) return;
+  var lista = VIAJES_AUTO.lista;
+  if(estado) estado.textContent = lista.length
+    ? lista.length+' viaje'+(lista.length===1?'':'s')+' detectado'+(lista.length===1?'':'s')+' por telemetría, todavía no importado'+(lista.length===1?'':'s')+' al historial de abajo'
+    : 'Sin viajes detectados automáticamente todavía.';
+  cont.innerHTML = lista.map(function(t){
+    var origen = t.start_location_raw || 'Origen sin geocodificar';
+    var destino = t.end_location_raw || 'Destino sin geocodificar';
+    return '<div class="fila">'+
+      '<div class="ico viaje" data-icon="ruta"></div>'+
+      '<div class="fila-tx"><div class="t1">'+esc(origen)+' → '+esc(destino)+'</div>'+
+      '<div class="t2">'+fechaCorta(t.started_at)+' · '+fmtMinAuto(t.duration_min)+' · Tesla'+(t.classification?' · '+esc(t.classification):'')+'</div></div>'+
+      '<div class="fila-r"><div class="r1">'+fmtKmAuto(t.distance_km)+'</div><div class="r2">'+(t.data_quality==='estimated'?'estimado':'')+'</div></div>'+
+      '</div>';
+  }).join('');
+}
+async function cargarCargasAutomaticas(fetchImpl){
+  var cont = document.getElementById('lista-cargas-auto');
+  var estado = document.getElementById('cargas-auto-estado');
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ if(cont) cont.innerHTML=''; if(estado) estado.textContent = ctx.motivo; return; }
+  try{
+    var res = await (fetchImpl||fetch)(ctx.backendUrl+'/telemetria/cargas?vin='+encodeURIComponent(ctx.vin), { headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+    if(res.status===501){ if(estado) estado.textContent = 'El Worker todavía no tiene el binding D1 desplegado.'; return; }
+    if(!res.ok){ CARGAS_AUTO.error = 'HTTP '+res.status; if(estado) estado.textContent = 'No se pudieron cargar las cargas automáticas ('+CARGAS_AUTO.error+').'; return; }
+    var body = await res.json();
+    CARGAS_AUTO.lista = (body && body.cargas) || [];
+    CARGAS_AUTO.cargado = true; CARGAS_AUTO.error = null;
+  }catch(e){ CARGAS_AUTO.error = e.message; if(estado) estado.textContent = 'No se pudo contactar con el backend: '+e.message; return; }
+  renderCargasAutomaticas();
+}
+function renderCargasAutomaticas(){
+  var cont = document.getElementById('lista-cargas-auto');
+  var estado = document.getElementById('cargas-auto-estado');
+  if(!cont) return;
+  var lista = CARGAS_AUTO.lista;
+  if(estado) estado.textContent = lista.length
+    ? lista.length+' carga'+(lista.length===1?'':'s')+' detectada'+(lista.length===1?'':'s')+' por telemetría, todavía no importada'+(lista.length===1?'':'s')+' al historial de abajo'
+    : 'Sin cargas detectadas automáticamente todavía.';
+  cont.innerHTML = lista.map(function(c){
+    var lugar = NOMBRE_TIPO_CARGA_AUTO[c.charger_type] || 'Carga';
+    // Reutiliza costeCarga() tal cual (mismo criterio en toda la app: nunca inventa un coste de 0€).
+    var coste = costeCarga({ total_cost: c.total_cost, kwh: c.energy_kwh });
+    return '<div class="fila">'+
+      '<div class="ico carga" data-icon="rayo"></div>'+
+      '<div class="fila-tx"><div class="t1">'+esc(lugar)+(c.charging_current_type?' · '+esc(c.charging_current_type):'')+'</div>'+
+      '<div class="t2">'+fechaCorta(c.started_at)+' · '+fmtBateria(c.start_soc_pct)+' → '+fmtBateria(c.end_soc_pct)+' · Tesla</div></div>'+
+      '<div class="fila-r"><div class="r1">'+fmtKwhAuto(c.energy_kwh)+'</div><div class="r2">'+euros(coste)+'</div></div>'+
+      '</div>';
+  }).join('');
+}
+
+/* ---------- B7 (FASE B) — administración completa de lugares (geofences en D1) ----------
+ * Hasta ahora `locations` (D1) solo se LEÍA del lado del servidor para clasificar viajes/cargas —
+ * no había ningún sitio en la app donde el usuario pudiera dar de alta, editar o borrar un lugar:
+ * solo existía "Lugares" (sección más arriba), que son estadísticas + favoritos LOCALES
+ * (DATOS.favoritos, otra colección totalmente distinta). Este bloque es el CRUD real contra
+ * /lugares (Worker) — reutiliza contextoTelemetriaAuto() (mismo gateo por flag/VIN/backend que
+ * B5/B6) para no duplicar esa comprobación por tercera vez.
+ * NORMA SOBRE DATOS INVENTADOS: el radio por defecto (150 m) y la categoría/privacidad "sin
+ * marcar" los decide el propio Worker al guardar (ver worker.js) — aquí solo se envía lo que el
+ * usuario ha escrito, nunca se rellena un valor a ciegas del lado del cliente.
+ */
+var LUGARES_D1 = { lista: [], cargado: false, error: null };
+var editandoLugarD1 = null;
+async function cargarLugaresD1(fetchImpl){
+  var cont = document.getElementById('lista-lugares-d1');
+  var estado = document.getElementById('lugares-d1-estado');
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ if(cont) cont.innerHTML=''; if(estado) estado.textContent = ctx.motivo; return; }
+  try{
+    var res = await (fetchImpl||fetch)(ctx.backendUrl+'/lugares?vin='+encodeURIComponent(ctx.vin), { headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+    if(res.status===501){ if(estado) estado.textContent = 'El Worker todavía no tiene el binding D1 desplegado.'; return; }
+    if(!res.ok){ LUGARES_D1.error = 'HTTP '+res.status; if(estado) estado.textContent = 'No se pudieron cargar los lugares ('+LUGARES_D1.error+').'; return; }
+    var body = await res.json();
+    LUGARES_D1.lista = (body && body.lugares) || [];
+    LUGARES_D1.cargado = true; LUGARES_D1.error = null;
+  }catch(e){ LUGARES_D1.error = e.message; if(estado) estado.textContent = 'No se pudo contactar con el backend: '+e.message; return; }
+  renderLugaresD1();
+}
+var NOMBRE_CATEGORIA_LUGAR = { casa:'Casa', trabajo:'Trabajo', otro:'Otro' };
+function renderLugaresD1(){
+  var cont = document.getElementById('lista-lugares-d1');
+  var estado = document.getElementById('lugares-d1-estado');
+  if(!cont) return;
+  var lista = LUGARES_D1.lista;
+  if(estado) estado.textContent = lista.length
+    ? lista.length+' lugar'+(lista.length===1?'':'es')+' guardado'+(lista.length===1?'':'s')+' — se usan para clasificar viajes/cargas automáticamente'
+    : 'Sin lugares guardados todavía. Añade "Casa" o "Trabajo" para que la clasificación automática los reconozca.';
+  cont.innerHTML = lista.map(function(l){
+    var cat = NOMBRE_CATEGORIA_LUGAR[l.category] || 'Sin categoría';
+    var oculto = l.privacy_level==='oculta_en_exportaciones' ? ' · oculto en exportaciones' : '';
+    return '<div class="fila">'+
+      '<div class="ico" style="background:rgba(142,68,236,.12);color:#8e44ec" data-icon="pin"></div>'+
+      '<div class="fila-tx" data-editar-lugar-d1="'+l.id+'"><div class="t1">'+esc(l.name)+'</div>'+
+      '<div class="t2">'+cat+' · '+l.lat.toFixed(5)+', '+l.lng.toFixed(5)+' · '+Math.round(l.radius_m)+' m'+oculto+'</div></div>'+
+      '<button type="button" class="btn-borrar" data-borrar-lugar-d1="'+l.id+'" data-icon="papelera" aria-label="Eliminar"></button>'+
+      '</div>';
+  }).join('');
+  aplicarIconos();
+}
+function abrirFormLugarD1(l){
+  editandoLugarD1 = l ? l.id : null;
+  document.getElementById('fl-nombre').value = l ? l.name : '';
+  document.getElementById('fl-categoria').value = l ? (l.category||'') : '';
+  document.getElementById('fl-lat').value = l ? l.lat : '';
+  document.getElementById('fl-lng').value = l ? l.lng : '';
+  document.getElementById('fl-radio').value = (l && l.radius_m!=null) ? l.radius_m : '';
+  document.getElementById('fl-oculto').checked = !!(l && l.privacy_level==='oculta_en_exportaciones');
+  document.getElementById('fl-guardar').textContent = l ? 'Guardar cambios' : 'Guardar lugar';
+  document.getElementById('form-lugar-d1').classList.remove('form-oculto');
+}
+document.getElementById('btn-add-lugar-d1').addEventListener('click', function(){ abrirFormLugarD1(null); });
+document.getElementById('fl-cancelar').addEventListener('click', function(){
+  editandoLugarD1 = null;
+  document.getElementById('form-lugar-d1').classList.add('form-oculto');
+});
+document.getElementById('form-lugar-d1').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ toast(ctx.motivo, true); return; }
+  var lat = parseFloat(document.getElementById('fl-lat').value);
+  var lng = parseFloat(document.getElementById('fl-lng').value);
+  var nombre = document.getElementById('fl-nombre').value.trim();
+  if(!nombre || !isFinite(lat) || !isFinite(lng)){ toast('Completa al menos nombre, latitud y longitud.', true); return; }
+  var radioTexto = document.getElementById('fl-radio').value;
+  var cuerpo = {
+    vin: ctx.vin, name: nombre, lat: lat, lng: lng,
+    category: document.getElementById('fl-categoria').value || null,
+    privacy_level: document.getElementById('fl-oculto').checked ? 'oculta_en_exportaciones' : 'normal'
+  };
+  if(radioTexto !== '') cuerpo.radius_m = parseFloat(radioTexto);
+  if(editandoLugarD1) cuerpo.id = editandoLugarD1;
+  try{
+    var res = await fetch(ctx.backendUrl+'/lugares', {
+      method:'POST', headers:{ 'Authorization':'Bearer '+ctx.sessionToken, 'Content-Type':'application/json' }, body: JSON.stringify(cuerpo)
+    });
+    if(!res.ok){
+      var err = await res.json().catch(function(){ return null; });
+      toast('No se pudo guardar el lugar'+(err&&err.error?' ('+err.error+')':''), true);
+      return;
+    }
+    editandoLugarD1 = null;
+    document.getElementById('form-lugar-d1').classList.add('form-oculto');
+    toast('Lugar guardado');
+    cargarLugaresD1();
+  }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+});
+document.getElementById('lista-lugares-d1').addEventListener('click', function(e){
+  var editar = e.target.closest('[data-editar-lugar-d1]');
+  if(editar){
+    var l = LUGARES_D1.lista.find(function(x){ return x.id===editar.dataset.editarLugarD1; });
+    if(l) abrirFormLugarD1(l);
+    return;
+  }
+  var borrar = e.target.closest('[data-borrar-lugar-d1]');
+  if(!borrar) return;
+  var idB = borrar.dataset.borrarLugarD1;
+  var l = LUGARES_D1.lista.find(function(x){ return x.id===idB; });
+  confirmarAccion('Eliminar lugar', '¿Eliminar "'+(l?l.name:'')+'"? Dejará de usarse para clasificar viajes/cargas automáticamente.', async function(){
+    var ctx = contextoTelemetriaAuto();
+    if(!ctx.ok){ toast(ctx.motivo, true); return; }
+    try{
+      var res = await fetch(ctx.backendUrl+'/lugares?id='+encodeURIComponent(idB)+'&vin='+encodeURIComponent(ctx.vin), {
+        method:'DELETE', headers:{ 'Authorization':'Bearer '+ctx.sessionToken }
+      });
+      if(!res.ok){ toast('No se pudo eliminar el lugar.', true); return; }
+      toast('Lugar eliminado');
+      cargarLugaresD1();
+    }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+  }, 'Eliminar');
+});
+
+/* ---------- B8 (FASE B) — UI completa de reglas de automatización (clasificación/precio) ----------
+ * `automation_rules` (D1) ya se LEÍA y se APLICABA de verdad por el motor de Fase 4B/4C
+ * (clasificarViajeConReglas/calcularCosteConReglas, en worker.js) — solo faltaba una forma de
+ * administrarlas desde la app, exactamente el mismo hueco que tenía "locations" antes de B7. Los
+ * desplegables de origen/destino/lugar reutilizan LUGARES_D1 (B7) — nunca una segunda fuente de
+ * "lugares" del lado del cliente.
+ */
+var REGLAS_VIAJE = [];
+var REGLAS_CARGA = [];
+var editandoReglaViaje = null;
+var editandoReglaCarga = null;
+async function cargarReglas(fetchImpl){
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok) return; // el resto del panel de Automatización ya explica el motivo (mismo mensaje)
+  try{
+    var resLugares = await (fetchImpl||fetch)(ctx.backendUrl+'/lugares?vin='+encodeURIComponent(ctx.vin), { headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+    if(resLugares.ok){ var bl = await resLugares.json().catch(function(){ return null; }); if(bl) LUGARES_D1.lista = bl.lugares||[]; }
+  }catch(e){ /* los desplegables de origen/destino quedarán sin opciones; las reglas ya guardadas se siguen mostrando igual */ }
+  try{
+    var res = await (fetchImpl||fetch)(ctx.backendUrl+'/reglas?vin='+encodeURIComponent(ctx.vin), { headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+    if(!res.ok) return;
+    var body = await res.json();
+    var reglas = (body && body.reglas) || [];
+    REGLAS_VIAJE = reglas.filter(function(r){ return r.tipo==='clasificacion_viaje'; });
+    REGLAS_CARGA = reglas.filter(function(r){ return r.tipo==='precio_carga'; });
+  }catch(e){ return; }
+  renderReglas();
+}
+function opcionesLugarSelect(seleccionId){
+  return '<option value="">Cualquiera</option>'+LUGARES_D1.lista.map(function(l){
+    return '<option value="'+l.id+'"'+(l.id===seleccionId?' selected':'')+'>'+esc(l.name)+'</option>';
+  }).join('');
+}
+function nombreLugar(id){
+  if(!id) return 'cualquiera';
+  var l = LUGARES_D1.lista.find(function(x){ return x.id===id; });
+  return l ? l.name : id;
+}
+var ETIQUETA_CLASIFICACION_REGLA = { trabajo:'Trabajo', personal:'Personal', otro:'Otro' };
+function renderReglas(){
+  var contViaje = document.getElementById('lista-reglas-viaje');
+  if(contViaje){
+    contViaje.innerHTML = REGLAS_VIAJE.length ? REGLAS_VIAJE.map(function(r){
+      return '<div class="fila">'+
+        '<div class="ico" style="background:rgba(10,132,255,.12);color:var(--acc2)" data-icon="ruta"></div>'+
+        '<div class="fila-tx" data-editar-regla-viaje="'+r.id+'"><div class="t1">'+esc(nombreLugar(r.condicion.origen_location_id))+' → '+esc(nombreLugar(r.condicion.destino_location_id))+'</div>'+
+        '<div class="t2">Clasifica como '+(ETIQUETA_CLASIFICACION_REGLA[r.accion.classification]||r.accion.classification)+(r.activa?'':' · inactiva')+(r.veces_usada?' · usada '+r.veces_usada+' veces':'')+'</div></div>'+
+        '<button type="button" class="btn-borrar" data-borrar-regla-viaje="'+r.id+'" data-icon="papelera" aria-label="Eliminar"></button>'+
+        '</div>';
+    }).join('') : '<p class="txt-secundario">Sin reglas de clasificación todavía.</p>';
+  }
+  var contCarga = document.getElementById('lista-reglas-carga');
+  if(contCarga){
+    contCarga.innerHTML = REGLAS_CARGA.length ? REGLAS_CARGA.map(function(r){
+      var precioTxt = r.accion.free ? 'Gratuita' : (typeof r.accion.price_kwh==='number' ? r.accion.price_kwh.toFixed(2)+' €/kWh' : (typeof r.accion.price_total==='number' ? r.accion.price_total.toFixed(2)+' € total' : '—'));
+      return '<div class="fila">'+
+        '<div class="ico carga" data-icon="rayo"></div>'+
+        '<div class="fila-tx" data-editar-regla-carga="'+r.id+'"><div class="t1">'+esc(nombreLugar(r.condicion.location_id))+'</div>'+
+        '<div class="t2">'+precioTxt+(r.activa?'':' · inactiva')+(r.veces_usada?' · usada '+r.veces_usada+' veces':'')+'</div></div>'+
+        '<button type="button" class="btn-borrar" data-borrar-regla-carga="'+r.id+'" data-icon="papelera" aria-label="Eliminar"></button>'+
+        '</div>';
+    }).join('') : '<p class="txt-secundario">Sin reglas de precio todavía.</p>';
+  }
+  aplicarIconos();
+}
+function abrirFormReglaViaje(r){
+  editandoReglaViaje = r ? r.id : null;
+  document.getElementById('fr-viaje-origen').innerHTML = opcionesLugarSelect(r ? r.condicion.origen_location_id : '');
+  document.getElementById('fr-viaje-destino').innerHTML = opcionesLugarSelect(r ? r.condicion.destino_location_id : '');
+  document.getElementById('fr-viaje-clasificacion').value = r ? r.accion.classification : 'trabajo';
+  document.getElementById('fr-viaje-activa').checked = r ? !!r.activa : true;
+  document.getElementById('fr-viaje-guardar').textContent = r ? 'Guardar cambios' : 'Guardar regla';
+  document.getElementById('form-regla-viaje').classList.remove('form-oculto');
+}
+function abrirFormReglaCarga(r){
+  editandoReglaCarga = r ? r.id : null;
+  document.getElementById('fr-carga-lugar').innerHTML = opcionesLugarSelect(r ? r.condicion.location_id : '');
+  var tipoPrecio = r ? (r.accion.free ? 'gratuita' : (typeof r.accion.price_kwh==='number' ? 'kwh' : 'total')) : 'kwh';
+  document.getElementById('fr-carga-tipo-precio').value = tipoPrecio;
+  document.getElementById('fr-carga-valor').value = r ? (r.accion.price_kwh!=null?r.accion.price_kwh:(r.accion.price_total!=null?r.accion.price_total:'')) : '';
+  document.getElementById('fr-carga-activa').checked = r ? !!r.activa : true;
+  document.getElementById('fr-carga-guardar').textContent = r ? 'Guardar cambios' : 'Guardar regla';
+  document.getElementById('form-regla-carga').classList.remove('form-oculto');
+}
+document.getElementById('btn-add-regla-viaje').addEventListener('click', function(){ abrirFormReglaViaje(null); });
+document.getElementById('fr-viaje-cancelar').addEventListener('click', function(){ editandoReglaViaje=null; document.getElementById('form-regla-viaje').classList.add('form-oculto'); });
+document.getElementById('form-regla-viaje').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ toast(ctx.motivo, true); return; }
+  var cuerpo = {
+    vin: ctx.vin, tipo: 'clasificacion_viaje',
+    condicion: {
+      origen_location_id: document.getElementById('fr-viaje-origen').value || undefined,
+      destino_location_id: document.getElementById('fr-viaje-destino').value || undefined
+    },
+    accion: { classification: document.getElementById('fr-viaje-clasificacion').value },
+    activa: document.getElementById('fr-viaje-activa').checked
+  };
+  if(editandoReglaViaje) cuerpo.id = editandoReglaViaje;
+  try{
+    var res = await fetch(ctx.backendUrl+'/reglas', { method:'POST', headers:{ 'Authorization':'Bearer '+ctx.sessionToken, 'Content-Type':'application/json' }, body: JSON.stringify(cuerpo) });
+    if(!res.ok){ toast('No se pudo guardar la regla.', true); return; }
+    editandoReglaViaje = null;
+    document.getElementById('form-regla-viaje').classList.add('form-oculto');
+    toast('Regla guardada');
+    cargarReglas();
+  }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+});
+document.getElementById('lista-reglas-viaje').addEventListener('click', function(e){
+  var editar = e.target.closest('[data-editar-regla-viaje]');
+  if(editar){ var r = REGLAS_VIAJE.find(function(x){ return x.id===editar.dataset.editarReglaViaje; }); if(r) abrirFormReglaViaje(r); return; }
+  var borrar = e.target.closest('[data-borrar-regla-viaje]');
+  if(!borrar) return;
+  var idB = borrar.dataset.borrarReglaViaje;
+  confirmarAccion('Eliminar regla', '¿Eliminar esta regla de clasificación?', async function(){
+    var ctx = contextoTelemetriaAuto();
+    if(!ctx.ok){ toast(ctx.motivo, true); return; }
+    try{
+      var res = await fetch(ctx.backendUrl+'/reglas?id='+encodeURIComponent(idB)+'&vin='+encodeURIComponent(ctx.vin), { method:'DELETE', headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+      if(!res.ok){ toast('No se pudo eliminar la regla.', true); return; }
+      toast('Regla eliminada');
+      cargarReglas();
+    }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+  }, 'Eliminar');
+});
+document.getElementById('btn-add-regla-carga').addEventListener('click', function(){ abrirFormReglaCarga(null); });
+document.getElementById('fr-carga-cancelar').addEventListener('click', function(){ editandoReglaCarga=null; document.getElementById('form-regla-carga').classList.add('form-oculto'); });
+document.getElementById('form-regla-carga').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var ctx = contextoTelemetriaAuto();
+  if(!ctx.ok){ toast(ctx.motivo, true); return; }
+  var tipoPrecio = document.getElementById('fr-carga-tipo-precio').value;
+  var valor = parseFloat(document.getElementById('fr-carga-valor').value);
+  var accion = {};
+  if(tipoPrecio==='gratuita') accion.free = true;
+  else if(tipoPrecio==='kwh'){ if(!isFinite(valor) || valor<=0){ toast('Introduce un €/kWh válido.', true); return; } accion.price_kwh = valor; }
+  else { if(!isFinite(valor) || valor<=0){ toast('Introduce un importe total válido.', true); return; } accion.price_total = valor; }
+  var cuerpo = {
+    vin: ctx.vin, tipo: 'precio_carga',
+    condicion: { location_id: document.getElementById('fr-carga-lugar').value || undefined },
+    accion: accion,
+    activa: document.getElementById('fr-carga-activa').checked
+  };
+  if(editandoReglaCarga) cuerpo.id = editandoReglaCarga;
+  try{
+    var res = await fetch(ctx.backendUrl+'/reglas', { method:'POST', headers:{ 'Authorization':'Bearer '+ctx.sessionToken, 'Content-Type':'application/json' }, body: JSON.stringify(cuerpo) });
+    if(!res.ok){ toast('No se pudo guardar la regla.', true); return; }
+    editandoReglaCarga = null;
+    document.getElementById('form-regla-carga').classList.add('form-oculto');
+    toast('Regla guardada');
+    cargarReglas();
+  }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+});
+document.getElementById('lista-reglas-carga').addEventListener('click', function(e){
+  var editar = e.target.closest('[data-editar-regla-carga]');
+  if(editar){ var r = REGLAS_CARGA.find(function(x){ return x.id===editar.dataset.editarReglaCarga; }); if(r) abrirFormReglaCarga(r); return; }
+  var borrar = e.target.closest('[data-borrar-regla-carga]');
+  if(!borrar) return;
+  var idB = borrar.dataset.borrarReglaCarga;
+  confirmarAccion('Eliminar regla', '¿Eliminar esta regla de precio?', async function(){
+    var ctx = contextoTelemetriaAuto();
+    if(!ctx.ok){ toast(ctx.motivo, true); return; }
+    try{
+      var res = await fetch(ctx.backendUrl+'/reglas?id='+encodeURIComponent(idB)+'&vin='+encodeURIComponent(ctx.vin), { method:'DELETE', headers:{ 'Authorization':'Bearer '+ctx.sessionToken } });
+      if(!res.ok){ toast('No se pudo eliminar la regla.', true); return; }
+      toast('Regla eliminada');
+      cargarReglas();
+    }catch(e){ toast('No se pudo contactar con el backend: '+e.message, true); }
+  }, 'Eliminar');
+});
 
 /* ---------- Fase 4E: panel "Automatización" (Ajustes) — pendientes, alertas y salud real ----------
  * Cliente de los endpoints reales /internal/health, /pendientes(/resolver) y /alertas(/resolver)
@@ -5441,13 +6954,13 @@ async function cargarAutomatizacion(){
   }
   var tcfg = cargarConfigTesla();
   var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
-  if(!backendUrl || !tcfg.adminKey){
-    estadoAutomatizacion('Configura antes la URL del backend y la clave de administración en "Conexión Tesla".', 'off');
+  if(!backendUrl || !tcfg.sessionToken){
+    estadoAutomatizacion('Configura antes la URL del backend y la token de sesión en "Conexión Tesla".', 'off');
     return;
   }
   estadoAutomatizacion('Comprobando…', 'busy');
   try{
-    var headers = { 'Authorization': 'Bearer '+tcfg.adminKey };
+    var headers = { 'Authorization': 'Bearer '+tcfg.sessionToken };
     var respuestas = await Promise.all([
       fetch(backendUrl+'/internal/health?vin='+encodeURIComponent(vin), { headers: headers }),
       fetch(backendUrl+'/pendientes?vin='+encodeURIComponent(vin), { headers: headers }),
@@ -5477,10 +6990,45 @@ async function cargarAutomatizacion(){
     // FASE A (A10): el modo real viene de /internal/health (salud.automation_mode) — se pinta el
     // botón activo y se explica en texto llano qué implica, nunca se asume "active" por defecto.
     renderModoAutomatizacion(salud && salud.automation_mode ? salud.automation_mode : 'off');
+    // B15: umbral TPMS real guardado en D1 — se rellena el input con lo que ya hay configurado,
+    // nunca con un valor de fábrica (si no hay nada guardado, el input queda vacío a propósito).
+    try{
+      var resTpms = await fetch(backendUrl+'/automatizacion/tpms-umbral?vin='+encodeURIComponent(vin), { headers: headers });
+      if(resTpms.ok){
+        var tpmsData = await resTpms.json().catch(function(){ return null; });
+        var inputTpms = document.getElementById('tpms-umbral');
+        var estadoTpms = document.getElementById('tpms-estado');
+        if(tpmsData && typeof tpmsData.tpms_umbral_bar==='number'){
+          if(inputTpms) inputTpms.value = tpmsData.tpms_umbral_bar;
+          if(estadoTpms) estadoTpms.textContent = 'Activo: avisa si baja de '+tpmsData.tpms_umbral_bar+' bar';
+        } else if(estadoTpms){
+          estadoTpms.textContent = 'Sin configurar — sin umbral, nunca se avisa (no se asume un valor "seguro" por ti)';
+        }
+      }
+    }catch(e){ /* no crítico: el resto del panel ya se ha cargado */ }
+    // B8 (FASE B): reglas de clasificación/precio — no crítico para el resto del panel si falla.
+    if(typeof cargarReglas==='function') cargarReglas();
   }catch(e){
     estadoAutomatizacion('No se pudo contactar con el backend: '+e.message, 'err');
   }
 }
+async function guardarUmbralTpms(){
+  var vin = vinAutomatizacion();
+  var tcfg = cargarConfigTesla();
+  var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
+  var umbral = parseFloat(document.getElementById('tpms-umbral').value);
+  if(!vin || !backendUrl || !tcfg.sessionToken){ toast('Conecta primero tu Tesla y configura el backend.', true); return; }
+  if(!isFinite(umbral) || umbral<=0 || umbral>6){ toast('Introduce un umbral válido en bar (p.ej. 2.5).', true); return; }
+  try{
+    var res = await fetch(backendUrl+'/automatizacion/tpms-umbral', {
+      method:'POST', headers:{ 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ vin: vin, tpms_umbral_bar: umbral })
+    });
+    if(res.ok){ toast('Umbral TPMS guardado: '+umbral+' bar'); cargarAutomatizacion(); }
+    else { toast('No se pudo guardar el umbral.', true); }
+  }catch(e){ toast('No se pudo contactar con el backend.', true); }
+}
+document.getElementById('btn-guardar-tpms').addEventListener('click', guardarUmbralTpms);
 function renderModoAutomatizacion(modo){
   var etiquetas = { off:'Off (nada se procesa)', shadow:'Shadow (probando, sin afectar a nada real)', active:'Active (viajes/cargas reales)' };
   var el = document.getElementById('auto-modo-actual');
@@ -5494,14 +7042,14 @@ async function fijarModoAutomatizacion(modo){
   var vin = vinAutomatizacion();
   var tcfg = cargarConfigTesla();
   var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
-  if(!vin || !backendUrl || !tcfg.adminKey) return;
+  if(!vin || !backendUrl || !tcfg.sessionToken) return;
   if(modo==='active'){
     var ok = await new Promise(function(resolve){ confirmarAccion('Activar automatización real', 'A partir de ahora los viajes y cargas detectados se guardarán como reales. Se recomienda haber probado antes varios días en modo Shadow (ver infra/README.md §9).', function(){ resolve(true); }, 'Activar', true); });
     if(!ok) return;
   }
   try{
     var res = await fetch(backendUrl+'/automatizacion/modo', {
-      method:'POST', headers:{ 'Authorization':'Bearer '+tcfg.adminKey, 'Content-Type':'application/json' },
+      method:'POST', headers:{ 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ vin: vin, modo: modo })
     });
     if(res.ok){ toast('Modo de automatización: '+modo); cargarAutomatizacion(); }
@@ -5560,7 +7108,7 @@ async function resolverPendienteAutomatizacion(id, resueltoCon){
   var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
   try{
     var res = await fetch(backendUrl+'/pendientes/resolver', {
-      method:'POST', headers: { 'Authorization':'Bearer '+tcfg.adminKey, 'Content-Type':'application/json' },
+      method:'POST', headers: { 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ id: id, resuelto_con: resueltoCon })
     });
     if(!res.ok){ toast('No se pudo guardar la respuesta.'); return; }
@@ -5573,7 +7121,7 @@ async function resolverAlertaAutomatizacion(id){
   var backendUrl = (tcfg.backendUrl || TESLA_CONFIG_POR_DEFECTO.backendUrl || '').replace(/\/$/,'');
   try{
     var res = await fetch(backendUrl+'/alertas/resolver', {
-      method:'POST', headers: { 'Authorization':'Bearer '+tcfg.adminKey, 'Content-Type':'application/json' },
+      method:'POST', headers: { 'Authorization':'Bearer '+tcfg.sessionToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ id: id })
     });
     if(!res.ok){ toast('No se pudo descartar la alerta.'); return; }
@@ -5616,6 +7164,8 @@ document.getElementById('gh-guardar-config').addEventListener('click', function(
 
 var syncGithubEnCurso = false;
 async function sincronizarGithub(opciones){
+  // Legacy blob sync is suspended after cutover; keep existing credentials/pending data.
+  if(!legacyBusinessPermitido()) return;
   opciones = opciones || {};
   var silencioso = !!opciones.silencioso;
   if(syncGithubEnCurso){ if(!silencioso) estadoSync('Ya hay una sincronización en curso…'); return; }
@@ -5665,12 +7215,18 @@ async function sincronizarGithubInterno(opciones, silencioso){
         var errTxt = await resGet.text();
         throw new Error('Error al leer ('+resGet.status+'): '+errTxt.slice(0,120));
       }
-      // Si el remoto pertenece a un dataset_id distinto (p. ej. tras "Empezar de cero completamente"
-      // en este u otro dispositivo), no se fusiona: el dataset antiguo queda invalidado y este
-      // dispositivo sobrescribe con el suyo, en vez de mezclar datos de linajes distintos.
+      // B25 (FASE B): mientras D1 no esté disponible como fuente canónica (RepositorioDatos, B1),
+      // GitHub sigue funcionando EXACTAMENTE igual que siempre — fusión de verdad en ambos
+      // sentidos — porque hoy es el único mecanismo real que tiene el usuario para compartir datos
+      // entre dispositivos (quitárselo sin sustituto sería NO ELIMINES FUNCIONES). En cuanto D1 sí
+      // está disponible, GitHub pasa a ser solo copia de seguridad: se sigue subiendo el estado
+      // actual en cada sincronización (para no perder esa función), pero nunca se vuelve a fusionar
+      // lo que haya en GitHub contra los datos locales — evita que una copia de seguridad antigua o
+      // de otro dispositivo pise silenciosamente los datos que D1 ya considera canónicos.
+      var soloBackup = (typeof repositorioD1Disponible === 'function') && repositorioD1Disponible();
       var mismoDataset = remoto && DATOS.dataset_id && remoto.dataset_id && remoto.dataset_id === DATOS.dataset_id;
-      var fusionado = remoto && (mismoDataset || !remoto.dataset_id) ? fusionarDatos(remoto, DATOS) : DATOS;
-      DATOS = fusionado;
+      var fusionado = (!soloBackup && remoto && (mismoDataset || !remoto.dataset_id)) ? fusionarDatos(remoto, DATOS) : DATOS;
+      DATOS = conservarBusinessCanonical(fusionado);
       guardarDatos(true); // true = no relanzar autosync mientras ya estamos sincronizando
       // Reflejamos el resultado de la fusión en la UI de inmediato, aunque el PUT de abajo falle luego
       renderDashboard(); renderCargas(); renderViajes(); renderBateria(); renderGastos(); renderEstadisticas(); renderAjustes();
@@ -5678,7 +7234,8 @@ async function sincronizarGithubInterno(opciones, silencioso){
       if(mapaLeaflet) pintarFavoritosEnMapa();
 
       var contenido = b64EncodeUnicode(JSON.stringify(DATOS, null, 2));
-      var body = { message: (silencioso ? 'Sincronización automática' : 'Sincronización manual')+' desde Mi Tesla · '+new Date().toISOString(), content: contenido };
+      var etiquetaAccion = soloBackup ? 'Copia de seguridad' : (silencioso ? 'Sincronización automática' : 'Sincronización manual');
+      var body = { message: etiquetaAccion+' desde Mi Tesla · '+new Date().toISOString(), content: contenido };
       if(sha) body.sha = sha;
       var resPut = await fetch(url, {
         method: 'PUT',
@@ -5691,8 +7248,8 @@ async function sincronizarGithubInterno(opciones, silencioso){
         localStorage.setItem('mitesla-ultima-sync', new Date().toISOString());
         localStorage.removeItem('mitesla-sync-pending');
         localStorage.removeItem('mitesla-sync-error');
-        estadoSync('Sincronizado correctamente · '+new Date().toLocaleTimeString('es-ES'));
-        if(!silencioso) toast('Sincronizado con GitHub');
+        estadoSync(soloBackup ? ('Copia de seguridad guardada · '+new Date().toLocaleTimeString('es-ES')) : ('Sincronizado correctamente · '+new Date().toLocaleTimeString('es-ES')));
+        if(!silencioso) toast(soloBackup ? 'Copia de seguridad guardada en GitHub' : 'Sincronizado con GitHub');
         return;
       }
       if(resPut.status === 409 && intento < MAX_REINTENTOS_409){
@@ -5729,6 +7286,7 @@ async function comprobarPrivacidadRepo(cfg){
 /* ---------- Auto-sincronización: se dispara sola unos segundos después de cualquier cambio ---------- */
 var autoSyncTimer = null;
 function programarAutoSync(){
+  if(!legacyBusinessPermitido()) return;
   var cfg = cargarConfigGithub();
   if(!cfg.repo || !cfg.token) return; // sin configurar todavía, no hacemos nada
   if(localStorage.getItem('mitesla-sync-suspendida')==='1') return; // reinicio local en curso: no descargar el remoto solo
@@ -5745,6 +7303,50 @@ document.getElementById('gh-sync').addEventListener('click', function(){
   localStorage.removeItem('mitesla-sync-suspendida'); // sincronizar a mano reactiva la sincronización automática
   sincronizarGithub({ silencioso:false });
 });
+
+// B25 resto (FASE B): "eliminar PAT de GitHub cuando ya no sea necesario". El token nunca se
+// borraba solo — se quedaba para siempre en localStorage (mitesla-github-config) aunque D1 ya
+// fuese la fuente canónica y GitHub solo sirviese de copia de seguridad, o aunque el usuario
+// dejase de querer sincronizar. NO se elimina la función de backup (NO ELIMINES FUNCIONES): esto
+// solo da al usuario una forma explícita de borrar la credencial del navegador cuando él decida
+// que ya no hace falta. Se conserva repo/path (no son secretos) para no obligar a re-teclearlos
+// si vuelve a pegar el token más adelante. Patrón de doble pulsación (armar → confirmar, con
+// timeout) en vez de window.confirm(): el resto de la app tampoco usa diálogos nativos del
+// navegador (bloquean la extensión de Chrome/automatización y no son estilizables), y así es
+// testeable sin gestionar diálogos.
+(function(){
+  var btn = document.getElementById('gh-eliminar-token');
+  if(!btn) return;
+  var TEXTO_INICIAL = btn.textContent;
+  var armado = false, timeoutArmado = null;
+  function desarmar(){
+    armado = false;
+    clearTimeout(timeoutArmado);
+    btn.textContent = TEXTO_INICIAL;
+    btn.classList.remove('btn-confirmar-peligro');
+  }
+  btn.addEventListener('click', function(){
+    if(!armado){
+      var cfgActual = cargarConfigGithub();
+      if(!cfgActual.token){ estadoSync('No hay ninguna credencial de GitHub guardada.'); return; }
+      armado = true;
+      btn.textContent = '¿Seguro? Pulsa otra vez para borrar';
+      btn.classList.add('btn-confirmar-peligro');
+      timeoutArmado = setTimeout(desarmar, 4000);
+      return;
+    }
+    desarmar();
+    var cfg = cargarConfigGithub();
+    cfg.token = ''; // se conserva repo/path: no son el secreto, y así no hay que re-teclearlos
+    guardarConfigGithub(cfg);
+    document.getElementById('gh-token').value = '';
+    localStorage.removeItem('mitesla-sync-pending');
+    localStorage.removeItem('mitesla-sync-error');
+    clearTimeout(autoSyncTimer); // sin token no hay nada que auto-sincronizar
+    estadoSync('Credencial de GitHub eliminada de este dispositivo. La sincronización/copia de seguridad se detiene hasta que pegues un token nuevo.');
+    toast('Token de GitHub eliminado de este dispositivo');
+  });
+})();
 
 /* ---------- Service Worker: registro + UX de nueva versión (punto 22) ---------- */
 // A21 (FASE A, auditoría externa 2026-09-20): bug encontrado y corregido durante la verificación
@@ -5806,6 +7408,10 @@ window.addEventListener('online', function(){
   }
 });
 window.addEventListener('offline', actualizarBandaOffline);
+// Micro-Work D: expose readiness for local/browser verification.
+frontendStartupPromise = iniciarFrontendCanonical().then(function(){ refrescarTodasLasVistas(); }).catch(function(e){
+  toast('No se pudo completar la lectura canónica. Se conserva la caché confirmada: '+e.message, true);
+});
 actualizarBandaOffline();
 renderDashboard();
 renderCargas();
@@ -5834,7 +7440,18 @@ renderPlanes();
 /* Fase 3, punto 2: consulta Tesla también al arrancar (antes solo se pedía al entrar en
  * Ajustes), para que el Dashboard pueda mostrar datos en vivo desde el primer momento — respeta
  * la caché de 45s de siempre, así que no añade tráfico extra si ya se acaba de consultar. */
-(function(){
+var teslaStartupPromise = (function(){
   var cfgInicial = cargarConfigTesla();
-  if(cfgInicial.backendUrl && cfgInicial.adminKey) fetchTeslaVehicle(cfgInicial, false);
+  if(cfgInicial.backendUrl && cfgInicial.sessionToken) return fetchTeslaVehicle(cfgInicial, false);
+  return Promise.resolve();
 })();
+
+
+
+window.addEventListener('online', function(){
+  if(backendCanonicalConfigurado() && !frontendReady){
+    frontendStartupPromise = iniciarFrontendCanonical().then(refrescarTodasLasVistas).catch(function(e){
+      toast('No se pudo completar la lectura canónica: '+e.message,true);
+    });
+  }
+});
