@@ -1,0 +1,14 @@
+{
+  "test_worker.mjs": {
+    "exit": 1
+  },
+  "test_fase4b_viajes.mjs": {
+    "exit": 1
+  },
+  "test_fase4c_cargas.mjs": {
+    "exit": 1
+  },
+  "test_d1_migraciones.js": {
+    "exit": 0
+  }
+}
