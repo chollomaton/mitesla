@@ -4,7 +4,7 @@
  * en cada despliegue con cambios de assets. Vincula el nombre de la caché a la
  * versión real de la app en vez de dejar un 'mitesla-v1' eterno (punto 21).
  */
-var CACHE_VERSION = '2026.10.09-no-car-session';
+var CACHE_VERSION = '2026.10.09-no-car-ready';
 var CACHE_ESTATICA = 'mitesla-estatica-' + CACHE_VERSION;
 
 /* App shell mínimo: solo lo verdaderamente estático. datos.json (si existiera) y

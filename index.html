@@ -471,7 +471,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
     <h1>Mi Tesla</h1>
   </div>
   <div style="display:flex;align-items:center;gap:2px">
-    <div class="pill" id="pill-estado"><span class="dot" id="pill-dot"></span><span id="pill-texto">En reposo</span></div>
+    <div class="pill" id="pill-estado"><span class="dot" id="pill-dot"></span><span id="pill-texto">Sin vehículo</span></div>
     <button type="button" id="btn-busqueda-global" aria-label="Buscar en toda la app">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
     </button>
@@ -491,7 +491,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
     <div class="hero-top">
       <div>
         <div class="modelo" id="dash-modelo">Model Y · Long Range</div>
-        <div class="estado" id="dash-estado">Aparcado en casa</div>
+        <div class="estado" id="dash-estado">Sin vehículo vinculado</div>
       </div>
     </div>
     <div class="bateria-num" id="dash-bateria-num">78<span>%</span></div>
@@ -1270,7 +1270,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
         <label>Sesión de este dispositivo (opcional si ya está activa)<input type="password" id="tesla-session-token" autocomplete="new-password" data-lpignore="true" placeholder="Pega el token de sesión de este dispositivo"></label>
         <label>Clave de alta Mi Tesla (solo para crear la sesión)<input type="password" id="mitesla-bootstrap-key" autocomplete="off" placeholder="Clave de administración, nunca una credencial Tesla"></label>
         <p id="mitesla-session-status" role="status">Puedes usar Mi Tesla sin vehículo. La sesión propia es independiente de Tesla.</p>
-        <div class="form-acciones">
+        <div class="form-acciones" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
           <button type="button" class="btn-secundario" id="mitesla-session-create">Crear sesión Mi Tesla</button>
           <button type="button" class="btn-secundario" id="mitesla-session-logout">Cerrar sesión Mi Tesla</button>
           <button class="btn-secundario" id="tesla-guardar-config">Guardar config.</button>

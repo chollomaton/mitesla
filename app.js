@@ -771,7 +771,7 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
 }
 
 /* ---------- Versión de la app instalada (para saber si está al día) ---------- */
-var APP_VERSION = '2026.10.09-no-car-session';
+var APP_VERSION = '2026.10.09-no-car-ready';
 
 /* ---------- Modelo de datos (semilla + localStorage) ---------- */
 var SCHEMA_VERSION = 2;
@@ -2599,6 +2599,10 @@ function renderDashboard(){
   document.getElementById('pill-texto').textContent = PILL_ESTADO[estadoActual] || PILL_ESTADO.aparcado;
   document.getElementById('pill-estado').className = 'pill p-'+estadoActual;
 
+  if(!DATOS.vehiculo.tesla_vin){
+    document.getElementById('dash-estado').textContent='Sin vehículo vinculado';
+    document.getElementById('pill-texto').textContent='Sin vehículo';
+  }
   aplicarSnapshotTeslaEnDashboard();
 
   var odoSub = DATOS.vehiculo.odometro_tesla_actualizado_at
