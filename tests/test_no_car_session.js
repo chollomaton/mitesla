@@ -12,6 +12,7 @@ const {lanzarChromium,urlIndexHtml}=require('./helpers/browser');
  else await route.fulfill({status:401,json:{error:'unauthorized'}});
  });
  await page.goto(urlIndexHtml());assert.match(await page.textContent('#pill-texto'),/Sin vehículo/);await page.evaluate(()=>mostrar('ajustes'));
+ await page.locator('#session-diagnostics summary').click();
  await page.fill('#tesla-backend-url','https://api.laperestronika.com');await page.fill('#mitesla-bootstrap-key','synthetic-bootstrap');
  await page.click('#mitesla-session-create');await page.waitForFunction(()=>document.getElementById('mitesla-session-status').textContent.includes('activa'));
  assert.equal(await page.inputValue('#mitesla-bootstrap-key'),'');
