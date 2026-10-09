@@ -771,7 +771,7 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
 }
 
 /* ---------- Versión de la app instalada (para saber si está al día) ---------- */
-var APP_VERSION = '2026.10.09-no-car-ready';
+var APP_VERSION = '2026.10.09-polish-no-car';
 
 /* ---------- Modelo de datos (semilla + localStorage) ---------- */
 var SCHEMA_VERSION = 2;
@@ -2599,6 +2599,8 @@ function renderDashboard(){
   document.getElementById('pill-texto').textContent = PILL_ESTADO[estadoActual] || PILL_ESTADO.aparcado;
   document.getElementById('pill-estado').className = 'pill p-'+estadoActual;
 
+  document.getElementById('no-car-welcome').hidden=!!DATOS.vehiculo.tesla_vin;
+  document.body.dataset.noVehicle=String(!DATOS.vehiculo.tesla_vin);
   if(!DATOS.vehiculo.tesla_vin){
     document.getElementById('dash-estado').textContent='Sin vehículo vinculado';
     document.getElementById('pill-texto').textContent='Sin vehículo';
@@ -2614,6 +2616,10 @@ function renderDashboard(){
     '<div class="card"><div class="lbl">'+li('euro')+'Coste medio</div><div class="val">'+costeTesla100.toFixed(2)+' €<span style="font-size:14px;font-weight:600;color:var(--txt3)">/100km</span></div><div class="sub">Frente a '+costeGasolina100.toFixed(2)+' € gasolina</div></div>'+
     '<div class="card"><div class="lbl">'+li('bateria')+'Batería</div><div class="val'+(bateriaActual===null?'':' ok')+'">'+(bateriaActual===null?'—':bateriaActual.toFixed(1)+' %')+'</div><div class="sub">'+(bateriaActual===null?'Sin lecturas todavía':'Capacidad estimada')+'</div></div>';
 
+  if(!DATOS.vehiculo.tesla_vin && !DATOS.viajes.length && !DATOS.cargas.length){
+    var cards=document.querySelectorAll('#dash-metricas .card');
+    (DATOS.vehiculo.odometro_km>0?[2]:[0,2]).forEach(function(i){cards[i].querySelector('.val').textContent='—';cards[i].querySelector('.sub').textContent='Sin registros todavía';});
+  }
   document.getElementById('dash-ahorro').textContent = euros(ahorroTotal);
   document.getElementById('dash-ahorro-sub').textContent = 'sobre '+kmSeguimiento().toLocaleString('es-ES')+' km desde que activaste el seguimiento';
 
@@ -3972,7 +3978,7 @@ function li(nombre){
 aplicarIconos();
 
 /* ---------- Navegación ---------- */
-var btns = document.querySelectorAll('.nav button, .nav-escritorio button');
+var btns = document.querySelectorAll('.nav button, .nav-escritorio button, .nav-coche button');
 var vistas = {
   dashboard: document.getElementById('vista-dashboard'),
   cargas: document.getElementById('vista-cargas'),
@@ -4467,10 +4473,25 @@ document.getElementById('dash-fuente-actualizar').addEventListener('click', func
 
 function teslaHeaders(cfg){ return { 'Authorization': 'Bearer ' + (cfg.sessionToken||'') }; }
 
+function mensajeConexionMiTesla(status){
+  if(status===401) return 'Tu sesión de Mi Tesla ha caducado o se ha revocado. Crea una sesión en Ajustes; tus datos guardados se conservan.';
+  if(status===403) return 'Esta sesión no tiene permiso para realizar la operación. Revisa el acceso en Ajustes.';
+  if(status===409) return 'Hay un cambio pendiente de otro dispositivo. Revisa la sincronización antes de reintentar.';
+  if(status===429) return 'Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.';
+  if(status>=500) return 'El servicio no está disponible temporalmente. Vuelve a intentarlo más tarde.';
+  return 'No se pudo completar la operación. Revisa la conexión y vuelve a intentarlo.';
+}
+async function fetchMiTeslaConEspera(url, opciones){
+  var control=new AbortController(), timer=setTimeout(function(){control.abort();},15000);
+  try{return await fetch(url,Object.assign({},opciones,{signal:control.signal}));}
+  catch(e){throw Error(e.name==='AbortError'?'La conexión tarda demasiado. Vuelve a intentarlo.':'No se pudo conectar con Mi Tesla. Comprueba tu conexión y vuelve a intentarlo.');}
+  finally{clearTimeout(timer);}
+}
+
 async function teslaFetch(cfg, ruta, opciones){
   opciones = opciones || {};
   opciones.headers = Object.assign({}, opciones.headers||{}, teslaHeaders(cfg));
-  var res = await fetch(cfg.backendUrl + ruta, opciones);
+  var res = await fetchMiTeslaConEspera(cfg.backendUrl + ruta, opciones);
   var body = null;
   try{ body = await res.json(); }catch(e){}
   return { ok: res.ok, status: res.status, body: body };
@@ -4498,7 +4519,7 @@ async function getTeslaConnectionStatus(forzar){
   try{
     var r = await teslaFetch(cfg, '/estado');
     if(!r.ok){
-      pintarEstadoTesla(TESLA_ERRORES[r.body && r.body.error] || 'No se pudo comprobar el estado.', '', 'err', false);
+      pintarEstadoTesla(mensajeConexionMiTesla(r.status), '', 'err', false);
       return null;
     }
     teslaCache.en = Date.now();
@@ -4511,7 +4532,7 @@ async function getTeslaConnectionStatus(forzar){
     }
     return r.body;
   }catch(e){
-    pintarEstadoTesla('Sin conexión con el backend.', '', 'err', false);
+    pintarEstadoTesla('No se pudo conectar con Mi Tesla', e.message, 'err', false);
     return null;
   }
 }
@@ -4652,10 +4673,11 @@ async function crearSesionMiTesla(){
   try{
     var cfg=configSesionFormulario();
     if(!key) throw Error('Introduce la clave de alta Mi Tesla. No uses credenciales Tesla.');
-    var res=await fetch(cfg.backendUrl+'/auth/bootstrap',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({device_label:'Mi Tesla navegador'})});
+    var res=await fetchMiTeslaConEspera(cfg.backendUrl+'/auth/bootstrap',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({device_label:'Mi Tesla navegador'})});
     key='';
     var body=await res.json();
-    if(!res.ok || !/^[A-Za-z0-9_-]{43}$/.test(body.session_token||'')) throw Error('No se pudo crear la sesión Mi Tesla. Revisa la clave de alta y el backend.');
+    if(!res.ok) throw Error(res.status===401?'La clave de alta no es válida. Revísala y vuelve a intentarlo.':mensajeConexionMiTesla(res.status));
+    if(!/^[A-Za-z0-9_-]{43}$/.test(body.session_token||'')) throw Error('No se pudo crear la sesión Mi Tesla. Revisa la configuración en Avanzado y diagnóstico.');
     cfg.sessionToken=body.session_token;guardarConfigTesla(cfg);
     document.getElementById('tesla-session-token').value=cfg.sessionToken;
     status.textContent='Sesión Mi Tesla activa. No necesitas conectar Tesla para usar la app.';
@@ -7496,3 +7518,21 @@ window.addEventListener('online', function(){
     });
   }
 });
+
+/* Elección explícita, persistente y sin suposiciones sobre el user-agent. */
+(function(){
+  var selector=document.getElementById('presentation-mode');
+  function aplicar(modo){
+    document.body.dataset.presentation=modo==='coche'?'coche':'auto';
+    selector.value=document.body.dataset.presentation;
+    window.dispatchEvent(new Event('resize'));
+  }
+  var modo='auto';try{modo=localStorage.getItem('mitesla-presentation')||'auto';}catch(e){}
+  aplicar(modo);
+  selector.addEventListener('change',function(){
+    aplicar(selector.value);
+    try{localStorage.setItem('mitesla-presentation',selector.value);}catch(e){}
+  });
+  function red(){document.getElementById('network-status').hidden=navigator.onLine;}
+  window.addEventListener('online',red);window.addEventListener('offline',red);red();
+})();
