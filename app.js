@@ -771,7 +771,7 @@ function confirmarAccion(titulo, texto, onConfirmar, textoBoton, seguro){
 }
 
 /* ---------- Versión de la app instalada (para saber si está al día) ---------- */
-var APP_VERSION = '2026.10.07-micro-aa';
+var APP_VERSION = '2026.10.09-no-car-session';
 
 /* ---------- Modelo de datos (semilla + localStorage) ---------- */
 var SCHEMA_VERSION = 2;
@@ -4483,7 +4483,7 @@ function pintarEstadoTesla(texto, sub, estadoDot, accionesVisibles){
 async function getTeslaConnectionStatus(forzar){
   var cfg = cargarConfigTesla();
   if(!cfg.backendUrl || !cfg.sessionToken){
-    pintarEstadoTesla('Sin configurar todavía.', '', 'off', false);
+    pintarEstadoTesla('Sin Tesla conectado', 'Puedes utilizar Mi Tesla sin vehículo vinculado.', 'off', false);
     document.getElementById('tesla-selector-vehiculo').style.display = 'none';
     return null;
   }
@@ -4502,7 +4502,7 @@ async function getTeslaConnectionStatus(forzar){
     if(r.body.conectado){
       await fetchTeslaVehicle(cfg, forzar);
     } else {
-      pintarEstadoTesla('No conectado.', 'Pulsa "Conectar con Tesla" para autorizar el acceso.', 'off', false);
+      pintarEstadoTesla('Sin Tesla conectado', 'Sin vehículo vinculado. Conecta Tesla cuando tengas el coche.', 'off', false);
       document.getElementById('tesla-selector-vehiculo').style.display = 'none';
     }
     return r.body;
@@ -4632,6 +4632,42 @@ async function disconnectTesla(){
     }catch(e){ toast('No se pudo desconectar — inténtalo de nuevo'); }
   }, 'Desconectar', true);
 }
+
+// Alta propia: ADMIN_TOKEN se usa solo durante bootstrap y nunca se persiste.
+function configSesionFormulario(){
+  var backend=document.getElementById('tesla-backend-url').value.trim().replace(/\/$/,'');
+  var url=new URL(backend);
+  if(url.protocol!=='https:' || url.username || url.password || url.search || url.hash || url.pathname!=='/') throw Error('Usa una URL HTTPS del backend sin ruta.');
+  return {backendUrl:backend,clientId:document.getElementById('tesla-client-id').value.trim(),sessionToken:document.getElementById('tesla-session-token').value.trim()};
+}
+async function crearSesionMiTesla(){
+  var input=document.getElementById('mitesla-bootstrap-key'), key=input.value;
+  input.value='';
+  var status=document.getElementById('mitesla-session-status');
+  var button=document.getElementById('mitesla-session-create');button.disabled=true;
+  try{
+    var cfg=configSesionFormulario();
+    if(!key) throw Error('Introduce la clave de alta Mi Tesla. No uses credenciales Tesla.');
+    var res=await fetch(cfg.backendUrl+'/auth/bootstrap',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({device_label:'Mi Tesla navegador'})});
+    key='';
+    var body=await res.json();
+    if(!res.ok || !/^[A-Za-z0-9_-]{43}$/.test(body.session_token||'')) throw Error('No se pudo crear la sesión Mi Tesla. Revisa la clave de alta y el backend.');
+    cfg.sessionToken=body.session_token;guardarConfigTesla(cfg);
+    document.getElementById('tesla-session-token').value=cfg.sessionToken;
+    status.textContent='Sesión Mi Tesla activa. No necesitas conectar Tesla para usar la app.';
+  }catch(e){status.textContent=e.message;}
+  finally{key='';input.value='';button.disabled=false;}
+}
+async function cerrarSesionMiTesla(){
+  var cfg=cargarConfigTesla(), status=document.getElementById('mitesla-session-status');
+  try{
+    if(cfg.sessionToken){var res=await teslaFetch(cfg,'/auth/session/revoke',{method:'POST'});if(!res.ok && res.status!==401)throw Error('No se pudo revocar la sesión. Reintenta antes de cerrar la pestaña.');}
+    cfg.sessionToken='';guardarConfigTesla(cfg);document.getElementById('tesla-session-token').value='';
+    status.textContent='Sesión Mi Tesla cerrada y revocada.';
+  }catch(e){status.textContent=e.message;}
+}
+document.getElementById('mitesla-session-create').addEventListener('click',crearSesionMiTesla);
+document.getElementById('mitesla-session-logout').addEventListener('click',cerrarSesionMiTesla);
 
 document.getElementById('tesla-guardar-config').addEventListener('click', function(){
   var cfg = {
@@ -7442,7 +7478,8 @@ renderPlanes();
  * la caché de 45s de siempre, así que no añade tráfico extra si ya se acaba de consultar. */
 var teslaStartupPromise = (function(){
   var cfgInicial = cargarConfigTesla();
-  if(cfgInicial.backendUrl && cfgInicial.sessionToken) return fetchTeslaVehicle(cfgInicial, false);
+  // No consultar vehículos automáticamente: la conexión real es un paso explícito futuro.
+  if(cfgInicial.backendUrl && cfgInicial.sessionToken) return getTeslaConnectionStatus(false);
   return Promise.resolve();
 })();
 

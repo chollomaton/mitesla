@@ -1255,7 +1255,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
   </div>
 
   <div class="sec">
-    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="rayo"></span><div><h2>Conexión con Tesla</h2><div class="sec-sub">Lectura en vivo del coche vía la Fleet API oficial</div></div></div></div>
+    <div class="sec-h"><div class="sec-tit"><span class="sec-ico" data-icon="rayo"></span><div><h2>Sesión Mi Tesla y conexión del vehículo</h2><div class="sec-sub">Lectura en vivo del coche vía la Fleet API oficial</div></div></div></div>
     <div class="estado-sync"><div class="ehd"><span class="epunto off" id="tesla-estado-dot"></span><div class="etxt"><div class="et" id="tesla-estado">Sin configurar todavía.</div><div class="es" id="tesla-estado-sub"></div></div></div>
       <div id="tesla-acciones" style="display:none;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line);background:var(--sunk)">
         <button type="button" class="ver" id="tesla-actualizar">Actualizar</button>
@@ -1267,14 +1267,18 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus
       <div style="padding:16px" class="form-grid">
         <label>Client ID (Tesla Developer)<input type="text" id="tesla-client-id" autocomplete="off" data-lpignore="true" placeholder="Pendiente de tu cuenta de desarrollador"></label>
         <label>URL del backend (Cloudflare Worker)<input type="text" id="tesla-backend-url" autocomplete="off" data-lpignore="true" placeholder="https://api.tudominio.com"></label>
-        <label>Token de sesión<input type="password" id="tesla-session-token" autocomplete="new-password" data-lpignore="true" placeholder="Pega el token de sesión de este dispositivo"></label>
+        <label>Sesión de este dispositivo (opcional si ya está activa)<input type="password" id="tesla-session-token" autocomplete="new-password" data-lpignore="true" placeholder="Pega el token de sesión de este dispositivo"></label>
+        <label>Clave de alta Mi Tesla (solo para crear la sesión)<input type="password" id="mitesla-bootstrap-key" autocomplete="off" placeholder="Clave de administración, nunca una credencial Tesla"></label>
+        <p id="mitesla-session-status" role="status">Puedes usar Mi Tesla sin vehículo. La sesión propia es independiente de Tesla.</p>
         <div class="form-acciones">
+          <button type="button" class="btn-secundario" id="mitesla-session-create">Crear sesión Mi Tesla</button>
+          <button type="button" class="btn-secundario" id="mitesla-session-logout">Cerrar sesión Mi Tesla</button>
           <button class="btn-secundario" id="tesla-guardar-config">Guardar config.</button>
           <button class="btn-primario" id="tesla-conectar">Conectar con Tesla</button>
         </div>
       </div>
     </div>
-    <p style="font-size:12px;color:var(--txt3);padding:0 4px">La clave de administración protege tu backend — sin ella, nadie que conozca la URL del Worker puede leer datos de tu coche. Se guarda solo en este dispositivo, igual que el token de GitHub.</p>
+    <p style="font-size:12px;color:var(--txt3);padding:0 4px">La clave de alta se usa una sola vez y no se guarda. La sesión Mi Tesla se conserva solo en esta pestaña, caduca y puede revocarse. Conecta Tesla únicamente cuando tengas el coche.</p>
   </div>
 
   <div class="sec">
