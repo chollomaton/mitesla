@@ -1,3 +1,4 @@
+import { admitObservations, stableJSON, reconcileCanonical, containsSecretFields, assertUnambiguousLifecycle } from './telemetry-integrity.mjs';
 import {sessionAuthentication,bootstrap,revoke} from './session-auth.mjs';
 /**
  * Mi Tesla — backend (Cloudflare Worker) — v2, revisión de seguridad
@@ -104,10 +105,10 @@ async function verificarFirmaBridge(request, env, cuerpoTexto) {
   const nonce = request.headers.get('X-Nonce') || '';
   if (!firma || !timestamp || !nonce) return { ok: false, motivo: 'faltan_cabeceras' };
   if (nonce.length > 200) return { ok: false, motivo: 'nonce_invalido' };
-  const tsNum = parseInt(timestamp, 10);
+  const tsNum = /^\d+$/.test(timestamp) ? Number(timestamp) : NaN;
   const ahoraS = Math.floor(Date.now() / 1000);
   if (!Number.isFinite(tsNum) || Math.abs(ahoraS - tsNum) > 120) return { ok: false, motivo: 'timestamp_fuera_de_ventana' };
-  if (!env.TELEMETRY_BRIDGE_SECRET) return { ok: false, motivo: 'secreto_no_configurado' };
+  if (typeof env.TELEMETRY_BRIDGE_SECRET !== 'string' || !env.TELEMETRY_BRIDGE_SECRET.trim()) return { ok: false, motivo: 'secreto_no_configurado' };
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.TELEMETRY_BRIDGE_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const firmaBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(timestamp + '.' + nonce + '.' + cuerpoTexto));
   const firmaCalculada = Array.from(new Uint8Array(firmaBuf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
@@ -225,7 +226,8 @@ async function actualizarHeartbeat(env, vin, señales) {
  * gigantes en la base de datos. Devuelve {ok:true} o {ok:false, motivo, detalle}.
  */
 function validarPayloadTelemetria(cuerpo) {
-  if (!cuerpo || typeof cuerpo !== 'object') return { ok: false, motivo: 'cuerpo_no_es_objeto' };
+  if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return { ok: false, motivo: 'cuerpo_no_es_objeto' };
+  if (containsSecretFields(cuerpo)) return {ok:false,motivo:'secret_fields_forbidden'};
   if (typeof cuerpo.vin !== 'string' || !vinFormatoValido(cuerpo.vin)) return { ok: false, motivo: 'vin_invalido' };
   if (cuerpo.events !== undefined && !Array.isArray(cuerpo.events)) return { ok: false, motivo: 'events_no_es_array' };
   const eventos = cuerpo.events || [];
@@ -233,13 +235,15 @@ function validarPayloadTelemetria(cuerpo) {
   const numeroFinitoOk = (v) => v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v));
   for (let i = 0; i < eventos.length; i++) {
     const ev = eventos[i];
-    if (!ev || typeof ev !== 'object') return { ok: false, motivo: 'evento_invalido', detalle: { indice: i } };
+    if (!ev || typeof ev !== 'object' || Array.isArray(ev)) return { ok: false, motivo: 'evento_invalido', detalle: { indice: i } };
     if (typeof ev.id !== 'string' || ev.id.length === 0 || ev.id.length > 128) return { ok: false, motivo: 'evento_id_invalido', detalle: { indice: i } };
     if (typeof ev.tipo !== 'string' || ev.tipo.length > 64) return { ok: false, motivo: 'evento_tipo_invalido', detalle: { indice: i } };
     if (typeof ev.observado_en !== 'string' || Number.isNaN(new Date(ev.observado_en).getTime())) {
       return { ok: false, motivo: 'evento_timestamp_invalido', detalle: { indice: i } };
     }
-    const p = (ev.payload && typeof ev.payload === 'object') ? ev.payload : {};
+    if (!ev.payload || typeof ev.payload !== 'object' || Array.isArray(ev.payload)) return {ok:false,motivo:'evento_payload_invalido'};
+    ev.observado_en = new Date(ev.observado_en).toISOString();
+    const p = ev.payload;
     if (JSON.stringify(p).length > 8192) return { ok: false, motivo: 'evento_payload_demasiado_grande', detalle: { indice: i } };
     if (!numeroFinitoOk(p.lat) || (typeof p.lat === 'number' && Math.abs(p.lat) > 90)) return { ok: false, motivo: 'lat_invalida', detalle: { indice: i } };
     if (!numeroFinitoOk(p.lng) || (typeof p.lng === 'number' && Math.abs(p.lng) > 180)) return { ok: false, motivo: 'lng_invalida', detalle: { indice: i } };
@@ -250,8 +254,12 @@ function validarPayloadTelemetria(cuerpo) {
     }
   }
   if (cuerpo.snapshot !== undefined && cuerpo.snapshot !== null) {
-    if (typeof cuerpo.snapshot !== 'object') return { ok: false, motivo: 'snapshot_no_es_objeto' };
+    if (typeof cuerpo.snapshot !== 'object' || Array.isArray(cuerpo.snapshot)) return { ok: false, motivo: 'snapshot_no_es_objeto' };
     const s = cuerpo.snapshot;
+    for (const campo of ['autonomia_km','temperatura_exterior','potencia_carga_kw','tiempo_restante_carga_min']) if (!numeroFinitoOk(s[campo])) return {ok:false,motivo:'snapshot_'+campo+'_invalido'};
+    if (s.fuente !== undefined && s.fuente !== 'TESLA_TELEMETRY') return {ok:false,motivo:'snapshot_fuente_invalida'};
+    if (typeof s.observado_en !== 'string' || !Number.isFinite(Date.parse(s.observado_en))) return {ok:false,motivo:'snapshot_timestamp_invalido'};
+    s.observado_en = new Date(s.observado_en).toISOString();
     if (!numeroFinitoOk(s.lat) || (typeof s.lat === 'number' && Math.abs(s.lat) > 90)) return { ok: false, motivo: 'snapshot_lat_invalida' };
     if (!numeroFinitoOk(s.lng) || (typeof s.lng === 'number' && Math.abs(s.lng) > 180)) return { ok: false, motivo: 'snapshot_lng_invalida' };
     if (!numeroFinitoOk(s.soc_pct) || (typeof s.soc_pct === 'number' && (s.soc_pct < 0 || s.soc_pct > 100))) return { ok: false, motivo: 'snapshot_soc_invalido' };
@@ -279,7 +287,7 @@ async function ponerEnCuarentena(env, vin, motivo, cuerpoTexto) {
   if (!env.DB) return;
   try {
     await env.DB.prepare('INSERT INTO quarantined_events (id, vin, motivo, payload_recortado, recibido_en) VALUES (?,?,?,?,?)')
-      .bind(nuevoId(), vin || null, motivo, String(cuerpoTexto).slice(0, 2000), new Date().toISOString()).run();
+      .bind(nuevoId(), vin || null, motivo, (env.TELEMETRY_BRIDGE_SECRET && String(cuerpoTexto).includes(env.TELEMETRY_BRIDGE_SECRET) ? '[redacted]' : String(cuerpoTexto).slice(0, 2000)), new Date().toISOString()).run();
   } catch (e) { /* la cuarentena es diagnóstico best-effort, nunca debe ocultar el motivo original del rechazo */ }
 }
 /** Contadores mensuales para el diagnóstico de consumo Tesla (sección 63) — se reinician solos
@@ -658,13 +666,14 @@ async function procesarViajesPendientes(env, vin, modo) {
   const filas = await env.DB.prepare(
     "SELECT id, tipo, payload, observado_en FROM telemetry_events_short_retention " +
     "WHERE vin = ? AND tipo IN ('trip_started','trip_finished') AND procesado_en IS NULL " +
-    'ORDER BY observado_en ASC LIMIT 200'
+    'ORDER BY observado_en ASC, id ASC LIMIT 200'
   ).bind(vin).all();
   const eventos = (filas.results || []).map(function (f) {
     let payload = {};
     try { payload = JSON.parse(f.payload); } catch (e) { /* payload corrupto: se trata como vacío, nunca se rompe el proceso */ }
     return { id: f.id, tipo: f.tipo, observado_en: f.observado_en, payload };
   });
+  assertUnambiguousLifecycle(eventos, 'trip_started', 'trip_finished');
   const { pares } = emparejarEventosEnViajes(eventos);
   if (pares.length === 0) return 0;
 
@@ -698,7 +707,9 @@ async function procesarViajesPendientes(env, vin, modo) {
     const { trip, pendiente, reglaUsada } = construirViajeDesdeEventos(vin, par.inicio, par.fin, {
       odometroSnapshots, bateriaSnapshots, ubicaciones, reglas, ahoraIso, esSombra, capacidadNominalKwh
     });
-    const inserted = await env.DB.prepare(
+    const existingCanonical = await env.DB.prepare('SELECT * FROM trips WHERE id=?').bind(trip.id).first();
+    const decision = reconcileCanonical(existingCanonical, trip);
+    const inserted = decision.status === 'create' ? await env.DB.prepare(
       'INSERT INTO trips (id, vin, started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, duration_min, ' +
       'start_soc_pct, end_soc_pct, start_energy_remaining_kwh, end_energy_remaining_kwh, energy_used_kwh, energy_source, consumption_is_estimated, ' +
       'start_lat, start_lng, end_lat, end_lng, start_location_id, end_location_id, route_simplified, ' +
@@ -712,14 +723,14 @@ async function procesarViajesPendientes(env, vin, modo) {
       trip.start_lat, trip.start_lng,
       trip.end_lat, trip.end_lng, trip.start_location_id, trip.end_location_id, trip.route_simplified, trip.classification,
       trip.classification_source, trip.classification_rule_id, trip.data_quality, trip.source, trip.is_shadow, trip.created_at, trip.updated_at
-    ).run();
+    ).run() : {meta:{changes:0}};
     if (inserted.meta?.changes !== 1 && !(await businessWritesAllowed(env))) return 0;
-    if (pendiente) {
+    if (decision.status !== 'tombstone' && existingCanonical?.manual_override == null && pendiente) {
       await env.DB.prepare(
         'INSERT OR IGNORE INTO pending_actions (id, vin, tipo, referencia_tabla, referencia_id, detalle, created_at) VALUES (?,?,?,?,?,?,?)'
       ).bind(pendiente.id, pendiente.vin, pendiente.tipo, pendiente.referencia_tabla, pendiente.referencia_id, pendiente.detalle, pendiente.created_at).run();
     }
-    if (reglaUsada) {
+    if (inserted.meta?.changes === 1 && reglaUsada) {
       await env.DB.prepare('UPDATE automation_rules SET veces_usada = veces_usada + 1, ultima_vez_usada = ? WHERE id = ?')
         .bind(ahoraIso, reglaUsada.id).run();
     }
@@ -800,6 +811,8 @@ function construirCargaDesdeEventos(vin, eventoInicio, eventoFin, contexto) {
   let energyKwh = null, energySource = null, chargingCurrentType = null;
   if (typeof acKwh === 'number' && acKwh > 0) { energyKwh = acKwh; energySource = 'ac_energy_in'; chargingCurrentType = 'AC'; }
   else if (typeof dcKwh === 'number' && dcKwh > 0) { energyKwh = dcKwh; energySource = 'dc_energy_added'; chargingCurrentType = 'DC'; }
+  else if (acKwh === 0) { energyKwh = 0; energySource = 'ac_energy_in'; chargingCurrentType = 'AC'; }
+  else if (dcKwh === 0) { energyKwh = 0; energySource = 'dc_energy_added'; chargingCurrentType = 'DC'; }
 
   const duracionMin = Math.round((new Date(eventoFin.observado_en).getTime() - new Date(eventoInicio.observado_en).getTime()) / 60000);
 
@@ -877,13 +890,14 @@ async function procesarCargasPendientes(env, vin, modo) {
   const filas = await env.DB.prepare(
     "SELECT id, tipo, payload, observado_en FROM telemetry_events_short_retention " +
     "WHERE vin = ? AND tipo IN ('charge_started','charge_stopped') AND procesado_en IS NULL " +
-    'ORDER BY observado_en ASC LIMIT 200'
+    'ORDER BY observado_en ASC, id ASC LIMIT 200'
   ).bind(vin).all();
   const eventos = (filas.results || []).map(function (f) {
     let payload = {};
     try { payload = JSON.parse(f.payload); } catch (e) { /* payload corrupto: se trata como vacío */ }
     return { id: f.id, tipo: f.tipo, observado_en: f.observado_en, payload };
   });
+  assertUnambiguousLifecycle(eventos, 'charge_started', 'charge_stopped');
   const { pares } = emparejarEventosEnCargas(eventos);
   if (pares.length === 0) return 0;
 
@@ -905,7 +919,9 @@ async function procesarCargasPendientes(env, vin, modo) {
   let cerradas = 0;
   for (const par of pares) {
     const { carga, pendiente, reglaUsada } = construirCargaDesdeEventos(vin, par.inicio, par.fin, { ubicaciones, reglas, ahoraIso, esSombra, potenciaSnapshots });
-    const inserted = await env.DB.prepare(
+    const existingCanonical = await env.DB.prepare('SELECT * FROM charging_sessions WHERE id=?').bind(carga.id).first();
+    const decision = reconcileCanonical(existingCanonical, carga);
+    const inserted = decision.status === 'create' ? await env.DB.prepare(
       'INSERT INTO charging_sessions (id, vin, started_at, ended_at, start_soc_pct, end_soc_pct, start_odometer_km, ' +
       'energy_kwh, energy_source, charging_current_type, duration_min, max_power_kw, average_power_kw, power_samples_count, ' +
       'lat, lng, location_id, total_cost, cost_source, ' +
@@ -917,14 +933,14 @@ async function procesarCargasPendientes(env, vin, modo) {
       carga.max_power_kw, carga.average_power_kw, carga.power_samples_count,
       carga.lat, carga.lng, carga.location_id, carga.total_cost, carga.cost_source, carga.price_rule_id, carga.data_quality, carga.source,
       carga.is_shadow, carga.created_at, carga.updated_at
-    ).run();
+    ).run() : {meta:{changes:0}};
     if (inserted.meta?.changes !== 1 && !(await businessWritesAllowed(env))) return 0;
-    if (pendiente) {
+    if (decision.status !== 'tombstone' && existingCanonical?.manual_override == null && pendiente) {
       await env.DB.prepare(
         'INSERT OR IGNORE INTO pending_actions (id, vin, tipo, referencia_tabla, referencia_id, detalle, created_at) VALUES (?,?,?,?,?,?,?)'
       ).bind(pendiente.id, pendiente.vin, pendiente.tipo, pendiente.referencia_tabla, pendiente.referencia_id, pendiente.detalle, pendiente.created_at).run();
     }
-    if (reglaUsada) {
+    if (inserted.meta?.changes === 1 && reglaUsada) {
       await env.DB.prepare('UPDATE automation_rules SET veces_usada = veces_usada + 1, ultima_vez_usada = ? WHERE id = ?')
         .bind(ahoraIso, reglaUsada.id).run();
     }
@@ -1038,7 +1054,7 @@ async function enriquecerViajesPendientes(env, opciones) {
   const timeoutMs = (opciones && opciones.timeoutMs) != null ? opciones.timeoutMs : TIMEOUT_MS;
   const filas = await env.DB.prepare(
     'SELECT id, vin, start_lat, start_lng, end_lat, end_lng, start_location_id, end_location_id, ' +
-    'start_location_raw, end_location_raw, started_at, weather ' +
+    'start_location_raw, end_location_raw, started_at, weather, revision, deleted_at, manual_override ' +
     'FROM trips WHERE (start_location_raw IS NULL AND start_lat IS NOT NULL) ' +
     'OR (end_location_raw IS NULL AND end_lat IS NOT NULL) OR (weather IS NULL AND start_lat IS NOT NULL) ' +
     'ORDER BY created_at ASC LIMIT ?'
@@ -1072,10 +1088,11 @@ async function enriquecerViajesPendientes(env, opciones) {
 
   let procesados = 0;
   for (const trip of trips) {
+    if (trip.deleted_at != null || trip.manual_override != null) continue;
     let cambios = {};
     const lugares = lugaresPorVin.get(trip.vin) || new Map();
     try {
-      if (!trip.start_location_raw && typeof trip.start_lat === 'number') {
+      if (trip.start_location_raw == null && typeof trip.start_lat === 'number') {
         if (trip.start_location_id && lugares.has(trip.start_location_id)) {
           cambios.start_location_raw = lugares.get(trip.start_location_id);
         } else {
@@ -1083,7 +1100,7 @@ async function enriquecerViajesPendientes(env, opciones) {
           if (nombre) cambios.start_location_raw = nombre;
         }
       }
-      if (!trip.end_location_raw && typeof trip.end_lat === 'number') {
+      if (trip.end_location_raw == null && typeof trip.end_lat === 'number') {
         if (trip.end_location_id && lugares.has(trip.end_location_id)) {
           cambios.end_location_raw = lugares.get(trip.end_location_id);
         } else {
@@ -1091,7 +1108,7 @@ async function enriquecerViajesPendientes(env, opciones) {
           if (nombre) cambios.end_location_raw = nombre;
         }
       }
-      if (!trip.weather && typeof trip.start_lat === 'number' && trip.started_at) {
+      if (trip.weather == null && typeof trip.start_lat === 'number' && trip.started_at) {
         const r = await fetchConTimeoutInyectable(fetchImpl, construirUrlOpenMeteo(trip.start_lat, trip.start_lng, trip.started_at), {}, timeoutMs);
         if (r.ok) { const j = await r.json(); const clima = extraerResumenClima(j, trip.started_at); if (clima) cambios.weather = JSON.stringify(clima); }
       }
@@ -1101,8 +1118,8 @@ async function enriquecerViajesPendientes(env, opciones) {
     }
     if (Object.keys(cambios).length > 0) {
       const set = Object.keys(cambios).map((c) => c + ' = ?').join(', ');
-      await env.DB.prepare('UPDATE trips SET ' + set + ', updated_at = ? WHERE id = ?' + BUSINESS_WRITE_GUARD)
-        .bind(...Object.values(cambios), new Date().toISOString(), trip.id).run();
+      await env.DB.prepare('UPDATE trips SET ' + set + ', revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ? AND deleted_at IS NULL AND manual_override IS NULL' + BUSINESS_WRITE_GUARD)
+        .bind(...Object.values(cambios), new Date().toISOString(), trip.id, trip.revision).run();
       procesados++;
     }
   }
@@ -2312,6 +2329,7 @@ export default {
     // - "snapshot": si viene, hace UPSERT de vehicle_snapshots (una sola fila "viva").
     // Nunca se acepta telemetría cruda sin agregar aquí: eso ya lo hace el bridge antes de enviar.
     if (url.pathname === '/internal/telemetry' && request.method === 'POST') {
+      if (typeof env.TELEMETRY_BRIDGE_SECRET !== 'string' || !env.TELEMETRY_BRIDGE_SECRET.trim()) return withCors(jsonError('telemetry_secret_unconfigured', 503, requestId), request, env);
       if (!env.DB) {
         return withCors(jsonError('d1_no_configurado', 501, requestId, {
           motivo: 'Falta el binding D1 "DB" — configura d1/schema.sql y despliega antes de activar el bridge.'
@@ -2342,7 +2360,7 @@ export default {
       const validacion = validarPayloadTelemetria(cuerpo);
       if (!validacion.ok) {
         console.error('telemetry_validacion_fallida', requestId, validacion.motivo, JSON.stringify(validacion.detalle || {}));
-        await ponerEnCuarentena(env, cuerpo && cuerpo.vin, validacion.motivo, cuerpoTexto);
+        await ponerEnCuarentena(env, cuerpo && cuerpo.vin, validacion.motivo, validacion.motivo === 'secret_fields_forbidden' ? '[redacted]' : cuerpoTexto);
         return withCors(jsonError(validacion.motivo, 400, requestId, validacion.detalle), request, env);
       }
       // A14: el VIN debe pertenecer a un vehículo autorizado explícitamente — nunca se acepta
@@ -2354,7 +2372,14 @@ export default {
         await ponerEnCuarentena(env, cuerpo.vin, 'vin_no_autorizado', cuerpoTexto);
         return withCors(jsonError('vin_no_autorizado', 403, requestId), request, env);
       }
-      const eventos = Array.isArray(cuerpo.events) ? cuerpo.events : [];
+      let eventos = Array.isArray(cuerpo.events) ? cuerpo.events : [];
+      try {
+        const admitted = await admitObservations(env.DB, cuerpo);
+        eventos = admitted.events;
+        if (!admitted.snapshot) cuerpo.snapshot = null;
+      } catch (e) {
+        return withCors(jsonError(e.message === 'observation_conflict' ? 'observation_conflict' : 'observation_store_unavailable', e.message === 'observation_conflict' ? 409 : 503, requestId), request, env);
+      }
       try {
         await asegurarVehiculoD1(env, cuerpo.vin);
         const ahoraIso = new Date().toISOString();
@@ -2374,7 +2399,7 @@ export default {
         for (const ev of eventos) {
           if (!ev || typeof ev.id !== 'string' || typeof ev.tipo !== 'string' || typeof ev.observado_en !== 'string') continue;
           const payloadObjeto = typeof ev.payload === 'object' && ev.payload ? ev.payload : {};
-          const payloadTexto = JSON.stringify(payloadObjeto);
+          const payloadTexto = stableJSON(payloadObjeto);
           if (payloadTexto.length > 8192) continue; // payload defendido: nunca rutas completas ni logs verbosos aquí
           const res = await env.DB.prepare(
             'INSERT OR IGNORE INTO telemetry_events_short_retention (id, vin, tipo, payload, observado_en, recibido_en) VALUES (?,?,?,?,?,?)'
@@ -2410,7 +2435,7 @@ export default {
             'tiempo_restante_carga_min=excluded.tiempo_restante_carga_min, ' +
             'tpms_fl_bar=excluded.tpms_fl_bar, tpms_fr_bar=excluded.tpms_fr_bar, tpms_rl_bar=excluded.tpms_rl_bar, tpms_rr_bar=excluded.tpms_rr_bar, ' +
             'fuente=excluded.fuente, observado_en=excluded.observado_en, recibido_en=excluded.recibido_en ' +
-            'WHERE excluded.observado_en >= vehicle_snapshots.observado_en' // nunca sobrescribe con un dato más antiguo (llegadas fuera de orden)
+            'WHERE julianday(excluded.observado_en) > julianday(vehicle_snapshots.observado_en)' // nunca sobrescribe con un dato más antiguo (llegadas fuera de orden)
           ).bind(
             cuerpo.vin, s.soc_pct ?? null, s.autonomia_km ?? null, s.odometro_km ?? null, s.estado ?? null,
             s.lat ?? null, s.lng ?? null, s.ubicacion_nombre ?? null, s.temperatura_exterior ?? null,
@@ -2437,7 +2462,7 @@ export default {
         // manda (bridge antiguo), se usa 0 en vez de inventar un número.
         await actualizarUsageCounters(env, cuerpo.vin, {
           telemetry_signals_received: Number.isFinite(Number(cuerpo.senales_recibidas)) ? Number(cuerpo.senales_recibidas) : 0,
-          derived_events: eventos.length
+          derived_events: insertados
         }).catch(function (e) { console.error('usage_counters_exception', requestId, String(e)); });
 
         // A10: el modo (off/shadow/active) decide si se consolidan viajes/cargas y si se marcan
@@ -2452,12 +2477,14 @@ export default {
           viajesCerrados = await procesarViajesPendientes(env, cuerpo.vin, modo);
         } catch (e) {
           console.error('procesar_viajes_exception', requestId, String(e));
+          throw e;
         }
         let cargasCerradas = 0;
         try {
           cargasCerradas = await procesarCargasPendientes(env, cuerpo.vin, modo);
         } catch (e) {
           console.error('procesar_cargas_exception', requestId, String(e));
+          throw e;
         }
         return withCors(new Response(JSON.stringify({
           ok: true, insertados, duplicados, viajes_cerrados: viajesCerrados, cargas_cerradas: cargasCerradas, automation_mode: modo
@@ -2465,7 +2492,7 @@ export default {
       } catch (e) {
         console.error('telemetry_exception', requestId, String(e));
         await incrementarContadorSyncState(env, cuerpo.vin, 'errores_mes', 1).catch(function () {});
-        return withCors(jsonError('telemetry_error', 502, requestId), request, env);
+        return withCors(jsonError(e.message === 'lifecycle_conflict' ? 'lifecycle_conflict' : String(e).includes('UNIQUE constraint failed') ? 'canonical_identity_conflict' : 'telemetry_error', e.message === 'lifecycle_conflict' || String(e).includes('UNIQUE constraint failed') ? 409 : 502, requestId), request, env);
       }
     }
 

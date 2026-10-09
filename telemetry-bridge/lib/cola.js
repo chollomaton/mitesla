@@ -33,6 +33,7 @@ class ColaPersistente {
     this.lineasCorruptasDescartadas = 0;
     this.rutaCuarentena = null;
     this._porId = new Map(); // Map<id, evento> — preserva orden de inserción
+    this._checkpoint = null;
     this._enviando = false; // A2: single-flight, ver index.js
     this._cargar();
   }
@@ -42,7 +43,8 @@ class ColaPersistente {
     try {
       texto = fs.readFileSync(this.rutaArchivo, 'utf8');
     } catch (e) {
-      return; // primer arranque: no hay archivo todavía, cola vacía — nunca un error fatal
+      if (e.code !== 'ENOENT') throw e;
+      return; // First boot only; unreadable persistence must fail closed.
     }
     const lineas = texto.split('\n').filter((l) => l.trim().length);
     const validas = [];
@@ -50,13 +52,21 @@ class ColaPersistente {
     for (const linea of lineas) {
       try {
         const ev = JSON.parse(linea);
+        if (ev && ev._checkpoint) {
+          if (!ev._checkpoint.vin || !ev._checkpoint.estadoActual || !ev._checkpoint.seguimiento?.conduccion || !ev._checkpoint.seguimiento?.carga) throw Error('checkpoint invalid');
+          this._checkpoint = ev._checkpoint;
+          continue;
+        }
         if (!ev || typeof ev.id !== 'string' || !ev.id) throw new Error('evento sin id');
         validas.push(ev);
       } catch (e) {
         corruptas.push(linea);
       }
     }
-    for (const ev of validas) this._porId.set(ev.id, ev);
+    for (const ev of validas) {
+      if(this._porId.has(ev.id) && JSON.stringify(this._porId.get(ev.id)) !== JSON.stringify(ev)) {corruptas.push(JSON.stringify(ev));continue;}
+      this._porId.set(ev.id, ev);
+    }
     if (corruptas.length) {
       this.corrupcionDetectada = true;
       this.lineasCorruptasDescartadas = corruptas.length;
@@ -79,10 +89,34 @@ class ColaPersistente {
   /** Escritura atómica: nunca se deja el fichero de cola a medias (write temporal + rename). */
   _guardar() {
     const eventos = Array.from(this._porId.values());
-    const texto = eventos.map((e) => JSON.stringify(e)).join('\n') + (eventos.length ? '\n' : '');
+    const records = this._checkpoint ? [{_checkpoint:this._checkpoint}, ...eventos] : eventos;
+    const texto = records.map(e=>JSON.stringify(e)).join('\n') + (records.length ? '\n' : '');
     const rutaTmp = this.rutaArchivo + '.tmp-' + process.pid + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    fs.writeFileSync(rutaTmp, texto, 'utf8');
-    fs.renameSync(rutaTmp, this.rutaArchivo);
+    let fd;
+    try {
+      fd=fs.openSync(rutaTmp,'wx',0o600);fs.writeFileSync(fd,texto,'utf8');fs.fsyncSync(fd);fs.closeSync(fd);fd=undefined;
+      fs.renameSync(rutaTmp,this.rutaArchivo);
+      const directory=fs.openSync(require('path').dirname(this.rutaArchivo),'r');try{fs.fsyncSync(directory)}catch(e){e.persistenceCommitUncertain=true;throw e}finally{fs.closeSync(directory)}
+    } finally {
+      if(fd!==undefined)fs.closeSync(fd);
+      if(fs.existsSync(rutaTmp))fs.unlinkSync(rutaTmp);
+    }
+  }
+
+  get checkpoint() { return this._checkpoint ? JSON.parse(JSON.stringify(this._checkpoint)) : null; }
+
+  /** Candidate/confirmed state and emitted events share one atomic disk commit. */
+  confirmarEstado(checkpoint, eventos=[]) {
+    const previous=this._checkpoint, oldMap=new Map(this._porId);
+    try {
+      this._checkpoint=JSON.parse(JSON.stringify(checkpoint));
+      for(const event of eventos) {
+        if(!event || typeof event.id !== 'string' || !event.id)throw Error('invalid event');
+        if(this._porId.has(event.id) && JSON.stringify(this._porId.get(event.id)) !== JSON.stringify(event))throw Error('event conflict');
+        this._porId.set(event.id,event);
+      }
+      this._guardar();
+    } catch(error) {this._checkpoint=previous;this._porId=oldMap;throw error;}
   }
 
   /** Encola un evento por id — si el id ya existe (reintento/duplicado local), no lo duplica. */
@@ -92,7 +126,7 @@ class ColaPersistente {
     }
     if (this._porId.has(evento.id)) return false;
     this._porId.set(evento.id, evento);
-    this._guardar();
+    try {this._guardar()}catch(e){this._porId.delete(evento.id);throw e}
     return true;
   }
 
@@ -110,11 +144,12 @@ class ColaPersistente {
   /** Elimina SOLO los eventos confirmados por el servidor. Cualquier evento encolado después de
    *  que empezara el envío (id distinto) permanece intacto para el siguiente ciclo. */
   ack(ids) {
+    const previous=new Map(this._porId);
     let cambiado = false;
     for (const id of ids || []) {
       if (this._porId.delete(id)) cambiado = true;
     }
-    if (cambiado) this._guardar();
+    if (cambiado) {try{this._guardar()}catch(e){this._porId=previous;throw e}}
     return cambiado;
   }
 
@@ -135,8 +170,8 @@ class ColaPersistente {
   /** Se mantiene por compatibilidad, pero index.js ya NO la usa tras A2 (vaciar sin ack()
    *  explícito reintroduce el bug que corrige esta fase). Solo para tests / reseteo deliberado. */
   vaciar() {
-    this._porId.clear();
-    this._guardar();
+    const previous=new Map(this._porId);this._porId.clear();
+    try{this._guardar()}catch(e){this._porId=previous;throw e}
   }
 
   get tamano() {

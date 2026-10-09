@@ -1,0 +1,44 @@
+# TELEMETRY INTEGRITY — local contract
+
+Starting checkpoint: e11fa8377203e2bf6cd03e63fe9abd7265aa13f6.
+This branch changes repository code only. No production deployment, database access, authority transition, Tesla connection, paid resource, or remote restore is part of certification.
+
+## Actual pipeline and layers
+
+The root worker.js reexports clean-production-adapter.mjs → worker.js. Existing tables are vehicles, vehicle_vin_allowlist, telemetry_nonces, vehicle_snapshots, telemetry_events_short_retention, trips, charging_sessions, battery_snapshots, odometer_snapshots, power_snapshots, sync_state and bridge operational tables.
+
+RAW Tesla signals and candidate/confirmed state live in telemetry-bridge/lib/normalizador.js. The outbox now persists VIN, observed state and candidate/confirmed transitions in a checkpoint record, atomically with emitted events (file fsync, rename, directory fsync; permissions 0600). MQTT candidate updates are committed before becoming visible in memory. ACK retains this checkpoint after removing acknowledged events; failed ACK restores the in-memory queue. A corrupted/unreadable checkpoint, VIN change or legacy nonempty outbox lacking a checkpoint stops bridge startup for explicit review. A directory fsync failure after rename stops the process because commit durability is uncertain. OBSERVED is the normalized bridge envelope, retained RAW events in telemetry_events_short_retention, and the new immutable fingerprint ledger telemetry_observations. CANONICAL is trips/charging_sessions with revision/deleted_at/manual_override. PRESENTATION reads canonical history and the independent latest vehicle_snapshots row. An open trip/charge is represented by a persisted unprocessed start event, never an incomplete canonical history row. No unnecessary ActiveTrip/ActiveCharge table is added.
+
+## Ingestion and authentication
+
+POST /internal/telemetry accepts `{vin,events:[{id,tipo,observado_en,payload}],snapshot?,heartbeat?,senales_recibidas?}`. Source is assigned by the server as TESLA_TELEMETRY. Event ID is stable, global within this bridge deployment; reusing it across VINs conflicts. All observation timestamps normalize to UTC ISO. Snapshot observed_at is required, even if there are no events. ingested_at is server time, excluded from the fingerprint. The bridge currently supplies no source_event_id or upstream revision; canonical revisions are a different namespace.
+
+Headers are X-Timestamp (integer Unix seconds), X-Nonce (one use, <=200 characters), X-Signature (hex HMAC-SHA256 of exact `timestamp.nonce.body` bytes). Timestamp window is ±120 seconds. Only TELEMETRY_BRIDGE_SECRET signs this channel. Missing/empty/blank backend secret returns 503 before database/authentication; missing/wrong signature returns 401. There is no ADMIN_TOKEN or browser session fallback. Allowlist failure returns 403; malformed payload 400. A replayed nonce returns 401; a retry must use a new nonce (the existing bridge sender already does so). Dedupe conflict returns 409; fingerprint store failure 503; interrupted derivation 502 and can be retried.
+
+Secrets are never part of observation rows or hashes. Recognized secret fields are rejected and quarantined as [redacted]; any quarantine text containing the configured bridge secret is redacted. No environment secret is introduced by this change. Test secrets are synthetic literals only.
+
+## Durable dedupe and deterministic reconciliation
+
+0009_telemetry_integrity.sql adds a secret-free ledger with PRIMARY KEY dedupe_key, VIN foreign key, observed_at, ingested_at, fixed source and SHA-256 of recursively sorted JSON (arrays keep order; null/0/false remain distinct). Event key is event:id; snapshot key is snapshot:vin:observed_at. The ledger survives short-retention event purges and is included in canonical backups. The existing telemetry_nonces table remains a transport replay barrier, not a business dedupe store.
+
+Complete request batches are preflighted for known conflicts before admission. Concurrent admissions are arbitrated by the ledger PK, followed by a fingerprint re-read; the loser receives 409. Admission is recoverable, not a single transaction spanning heartbeat/counters/history. A crash can retain a subset of fingerprints/RAW observations; an exact new-nonce retry repairs the remaining writes. Successful admission does not imply consolidation when automation is off. Partial processing followed by a 409 is explicit and requires inspecting the conflicting observations; it is never silently resolved.
+
+ReconcileCanonical is pure and wired into both history processors. Confirmed canonical rows win in full, including tombstones, revision, manual_override and scalar values. New history starts at revision 1. This deliberately protects the full row because manual_override is opaque JSON/flag in this schema; there is no trustworthy field-level override metadata. Ingestion never automatically patches confirmed history. A same canonical revision with different content is an explicit pure reconciliation conflict; unchanged content is confirmed. Observations do not supply canonical revisions.
+
+The bridge restart suite injects failed atomic writes before start and ACK, restarts after durable opening/closure and ACK, and proves that both trip and charge resume without duplicate transitions.
+
+Existing background enrichment can fill missing names/weather on unprotected live canonical rows. It now skips tombstones and any non-null manual_override, preserves explicit empty values, increments revision, and uses a revision comparison in its UPDATE to avoid overwriting concurrent manual edits. Telemetry snapshots require strictly newer observed_at; equal timestamp/different content conflicts, older observations remain evidence without degrading live state.
+
+## Lifecycle and recovery
+
+Only an explicit trip_finished or charge_stopped paired with a known start closes history. End arriving before a recovered start remains unprocessed. Restart recovery uses persistent events, not process memory. Stable event-pair IDs make repeated closure idempotent. Unique partial indexes on (vin,started_at) for TESLA_TELEMETRY history also reject alternative event IDs for the same physical opening, including tombstones. Ambiguous double starts or nonpositive closure intervals fail explicitly with lifecycle_conflict, instead of silently selecting a start. Legacy pure pairing helpers retain their defensive behavior for compatibility; the database ingestion processors enforce the stricter contract before calling them.
+
+Reprocessing neither repeats rule-use increments nor recreates pending actions on protected/tombstoned rows. Pending action creation can be retried after interrupted insertion. Rule-use counters remain operational diagnostics: a crash between session insertion and counter update may undercount usage; this never changes canonical history or charges money. A conflicting pending lifecycle remains unresolved until explicit operator review; automatic repair would invent a semantic decision.
+
+## Migration, backup and certification boundaries
+
+0009 is additive. It changes no authority or existing rows. The unique indexes intentionally fail migration if an existing database contains ambiguous duplicate telemetry openings; no rows are removed to make it pass. Applying migrations on any existing remote database requires a separate reviewed step. Existing RAW records are checked against incoming event content before a new ledger entry is admitted; historical records purged before this upgrade cannot be fingerprinted retroactively.
+
+Backup retains its v1 container format but now pins nine migrations and includes telemetry_observations. An eight-migration backup remains incompatible with the new schema and is rejected fail closed; no automatic production upgrade or restore is performed. Temporary RAW, browser sessions, nonce table and secrets stay excluded. Consequently a backup restore preserves consolidated history and dedupe evidence, but does not restore an active bridge session/RAW outbox; this is not a promise of active-state disaster recovery across a database restore. Runtime restart/crash recovery against the same database is tested separately.
+
+Certification uses Node's actual SQLite engine, all migrations from zero, exact standalone schema/index comparison, real Worker HTTP requests and synthetic HMAC, concurrent conflicts, injected crashes before RAW insertion and after canonical insertion, golden trip/charge construction, tombstones/manual corrections, and existing security/Worker/bridge/UI/backup suites. No remote resources are necessary for this local certificate. Remote staging certification and a reviewed promotion/configuration are required before real-Tesla validation; no readiness claim for a real car is made here.

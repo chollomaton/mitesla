@@ -1,0 +1,1005 @@
+{
+  "checkpoint": {
+    "head": "e93d2d5ab85951009321b221072de464bbc04f39",
+    "main": "e11fa8377203e2bf6cd03e63fe9abd7265aa13f6",
+    "clean": true
+  },
+  "auth": "OAuth Keychain d1:write",
+  "tests": {
+    "migration_ledger": {
+      "status": "PASS",
+      "actual": [
+        "0001_initial.sql",
+        "0002_capacidad_nominal_vehiculo.sql",
+        "0003_power_snapshots.sql",
+        "0004_tpms.sql",
+        "0005_push_real.sql",
+        "0006_data_canonical_lifecycle.sql",
+        "0007_c1_authority.sql",
+        "0008_session_auth.sql",
+        "0009_telemetry_integrity.sql"
+      ],
+      "expected": [
+        "0001_initial.sql",
+        "0002_capacidad_nominal_vehiculo.sql",
+        "0003_power_snapshots.sql",
+        "0004_tpms.sql",
+        "0005_push_real.sql",
+        "0006_data_canonical_lifecycle.sql",
+        "0007_c1_authority.sql",
+        "0008_session_auth.sql",
+        "0009_telemetry_integrity.sql"
+      ]
+    },
+    "schema_indexes_fk": {
+      "status": "PASS",
+      "actual": true,
+      "expected": true
+    },
+    "missing_env_secret_503": {
+      "status": "PASS",
+      "actual": 503,
+      "expected": 503
+    },
+    "hmac_missing": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "hmac_wrong": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "hmac_correct": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "malformed_json": {
+      "status": "PASS",
+      "actual": 400,
+      "expected": 400
+    },
+    "admin_no_telemetry_fallback": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "wrong_vehicle": {
+      "status": "PASS",
+      "actual": 403,
+      "expected": 403
+    },
+    "fresh_nonce": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "replay_nonce": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "event_new_or_retry_0": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "event_new_or_retry_1": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "event_new_or_retry_2": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "event_new_or_retry_3": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "event_dedupe_count": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "null_zero_false": {
+      "status": "PASS",
+      "actual": {
+        "flag": false,
+        "nil": null,
+        "zero": 0
+      },
+      "expected": {
+        "nil": null,
+        "zero": 0,
+        "flag": false
+      }
+    },
+    "concurrent_conflict": {
+      "status": "PASS",
+      "actual": [
+        200,
+        409
+      ],
+      "expected": [
+        200,
+        409
+      ]
+    },
+    "concurrent_one_row": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "event_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "snapshot_12:00": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "snapshot_11:00": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "snapshot_no_regression": {
+      "status": "PASS",
+      "actual": "2026-10-08T12:00:00.000Z",
+      "expected": "2026-10-08T12:00:00.000Z"
+    },
+    "snapshot_same_content": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "snapshot_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "snapshot_newer": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_start": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_active_retry": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_active_one_raw": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "trip_no_premature_history": {
+      "status": "PASS",
+      "actual": 0,
+      "expected": 0
+    },
+    "trip_interrupted_close": {
+      "status": "PASS",
+      "actual": 502,
+      "expected": 502
+    },
+    "trip_recovery_retry_0": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_recovery_retry_1": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_golden": {
+      "status": "PASS",
+      "actual": [
+        "2026-10-08T14:00:00.000Z",
+        "2026-10-08T14:30:00.000Z",
+        30,
+        1
+      ],
+      "expected": [
+        "2026-10-08T14:00:00.000Z",
+        "2026-10-08T14:30:00.000Z",
+        30,
+        1
+      ]
+    },
+    "trip_one_history": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "trip_manual_reprocess": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_manual_revision_protected": {
+      "status": "PASS",
+      "actual": {
+        "revision": 9,
+        "manual_override": "{\"zero\":0,\"flag\":false,\"nil\":null}"
+      },
+      "expected": {
+        "revision": 9,
+        "manual_override": "{\"zero\":0,\"flag\":false,\"nil\":null}"
+      }
+    },
+    "trip_tombstone_replay": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_tombstone_protected": {
+      "status": "PASS",
+      "actual": {
+        "revision": 10,
+        "deleted_at": "2026-10-08T15:00:00Z"
+      },
+      "expected": {
+        "revision": 10,
+        "deleted_at": "2026-10-08T15:00:00Z"
+      }
+    },
+    "trip_post_purge_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "trip_alternate_ids_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "trip_admission_crash": {
+      "status": "PASS",
+      "actual": 502,
+      "expected": 502
+    },
+    "trip_end_before_start_retry": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_late_start_recovery": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "trip_recovered_count": {
+      "status": "PASS",
+      "actual": 2,
+      "expected": 2
+    },
+    "golden_trip_measured": {
+      "status": "PASS",
+      "actual": [
+        10,
+        null
+      ],
+      "expected": [
+        10,
+        null
+      ]
+    },
+    "charge_start": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_active_retry": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_active_one_raw": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "charge_no_premature_history": {
+      "status": "PASS",
+      "actual": 0,
+      "expected": 0
+    },
+    "charge_interrupted_close": {
+      "status": "PASS",
+      "actual": 502,
+      "expected": 502
+    },
+    "charge_recovery_retry_0": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_recovery_retry_1": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_golden": {
+      "status": "PASS",
+      "actual": [
+        "2026-10-08T14:00:00.000Z",
+        "2026-10-08T14:30:00.000Z",
+        30,
+        1
+      ],
+      "expected": [
+        "2026-10-08T14:00:00.000Z",
+        "2026-10-08T14:30:00.000Z",
+        30,
+        1
+      ]
+    },
+    "charge_one_history": {
+      "status": "PASS",
+      "actual": 1,
+      "expected": 1
+    },
+    "charge_manual_reprocess": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_manual_revision_protected": {
+      "status": "PASS",
+      "actual": {
+        "revision": 9,
+        "manual_override": "{\"zero\":0,\"flag\":false,\"nil\":null}"
+      },
+      "expected": {
+        "revision": 9,
+        "manual_override": "{\"zero\":0,\"flag\":false,\"nil\":null}"
+      }
+    },
+    "charge_tombstone_replay": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_tombstone_protected": {
+      "status": "PASS",
+      "actual": {
+        "revision": 10,
+        "deleted_at": "2026-10-08T15:00:00Z"
+      },
+      "expected": {
+        "revision": 10,
+        "deleted_at": "2026-10-08T15:00:00Z"
+      }
+    },
+    "charge_post_purge_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "charge_alternate_ids_conflict": {
+      "status": "PASS",
+      "actual": 409,
+      "expected": 409
+    },
+    "charge_admission_crash": {
+      "status": "PASS",
+      "actual": 502,
+      "expected": 502
+    },
+    "charge_end_before_start_retry": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_late_start_recovery": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "charge_recovered_count": {
+      "status": "PASS",
+      "actual": 2,
+      "expected": 2
+    },
+    "golden_charge_measured": {
+      "status": "PASS",
+      "actual": [
+        0,
+        0,
+        0,
+        null
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        null
+      ]
+    },
+    "same_revision_same_content": {
+      "status": "PASS",
+      "actual": "confirmed",
+      "expected": "confirmed"
+    },
+    "same_revision_different_content": {
+      "status": "PASS",
+      "actual": "conflict",
+      "expected": "conflict"
+    },
+    "revision_monotonic": {
+      "status": "PASS",
+      "actual": {
+        "id": "x",
+        "revision": 8,
+        "deleted_at": null,
+        "manual_override": {
+          "distance_km": 0,
+          "flag": false
+        },
+        "distance_km": 0,
+        "note": null
+      },
+      "expected": {
+        "id": "x",
+        "revision": 8,
+        "deleted_at": null,
+        "manual_override": {
+          "distance_km": 0,
+          "flag": false
+        },
+        "distance_km": 0,
+        "note": null
+      }
+    },
+    "session_health": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "browser_authority": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "session_no_telemetry_fallback": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "session_revoke": {
+      "status": "PASS",
+      "actual": 200,
+      "expected": 200
+    },
+    "session_revoked_denied": {
+      "status": "PASS",
+      "actual": 401,
+      "expected": 401
+    },
+    "secret_field_rejected": {
+      "status": "PASS",
+      "actual": 400,
+      "expected": 400
+    },
+    "secret_not_quarantined": {
+      "status": "PASS",
+      "actual": 0,
+      "expected": 0
+    },
+    "foreign_key_check": {
+      "status": "PASS",
+      "actual": [],
+      "expected": []
+    },
+    "authority_staging": {
+      "status": "PASS",
+      "actual": "CANONICAL",
+      "expected": "CANONICAL"
+    },
+    "backup_remote_0009": {
+      "status": "PASS",
+      "actual": "REMOTE_PASS",
+      "expected": "REMOTE_PASS"
+    },
+    "old_eight_migration_backup_rejected": {
+      "status": "PASS",
+      "actual": true,
+      "expected": true
+    }
+  },
+  "cleanup": {
+    "mi-tesla-telemetry-canary-20261009123134": "DELETED",
+    "95ed0991-e0c2-44cf-a1e5-e4763fd8385a": "DELETED"
+  },
+  "production_d1_requests": 0,
+  "production_authority_requests": 0,
+  "production_before": {
+    "deployments": [
+      {
+        "id": "7ceae60d-0481-48ed-b076-7de12bb2c966",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "deacebbc-b883-4da1-8c19-ca45130e8bb2",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:08:01.53629Z"
+      },
+      {
+        "id": "cd0566bb-3394-4f4f-9722-d864298cf7a7",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "3c2c62cf-8010-4be3-8a18-1f1c06cf14eb",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:07:13.346433Z"
+      },
+      {
+        "id": "ea386291-ace1-4010-bb6f-78ef8bc97a59",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "f591e3f6-4f0e-4751-ad0a-799c148382a6",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:07:00.881382Z"
+      },
+      {
+        "id": "5471e02d-af8f-4e7b-bd8f-fb1d6bf27a59",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "960ed39a-84f7-4f35-884d-6a31899415dd",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:06:25.938259Z"
+      },
+      {
+        "id": "036180cf-4209-4e99-9367-970b2156d6cc",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "62f64ffc-6fad-4379-9e6b-8c3a7daf0f25",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:05:43.707067Z"
+      },
+      {
+        "id": "b8922ede-4878-4f37-8bed-08443aee9170",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "ae66353d-6ce3-4649-9903-dffee629e60f",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:03:59.354603Z"
+      },
+      {
+        "id": "1535638e-edfa-41a6-81ad-40a12fd08951",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "09dbdd90-7e9e-4c46-9193-d9e6ce3dfc67",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:00:58.098359Z"
+      },
+      {
+        "id": "65de8c27-279c-4e22-8798-dd35bfea9302",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version 31fee30c",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "31fee30c-2fd6-4a0f-b0a1-5a7f21a62cb9",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:48:04.124309Z"
+      },
+      {
+        "id": "bd854d3a-744c-4415-97f6-a899590ec19a",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version c0e9d8a8",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "c0e9d8a8-868b-4a8e-8997-0ea266a947d1",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:47:30.335778Z"
+      },
+      {
+        "id": "2ab33ca4-15a2-480d-a3dc-4c2ee591f997",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version 623586f8",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "623586f8-a6d6-46ba-a63b-90f7c3920c84",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:10:04.408545Z"
+      }
+    ]
+  },
+  "staging": {
+    "name": "mitesla-telemetry-cert-20261009123134",
+    "uuid": "95ed0991-e0c2-44cf-a1e5-e4763fd8385a"
+  },
+  "canary": {
+    "name": "mi-tesla-telemetry-canary-20261009123134",
+    "url": "https://mi-tesla-telemetry-canary-20261009123134.carlosgconde.workers.dev",
+    "entry": "branch worker.js with canary-only write-failure wrapper",
+    "logging": "disabled",
+    "routes": [],
+    "deployments": {
+      "deployments": [
+        {
+          "id": "f949a5ae-5296-4a0a-ba2b-63670383a7a1",
+          "source": "wrangler",
+          "strategy": "percentage",
+          "author_email": "carlosgconde@gmail.com",
+          "annotations": {
+            "workers/triggered_by": "secret"
+          },
+          "versions": [
+            {
+              "version_id": "bad7fd33-4144-44c1-8d32-ceb77baffd62",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-10-09T12:32:16.233245Z"
+        },
+        {
+          "id": "21ad6e9b-ded5-4276-b484-8984dd8a5b96",
+          "source": "wrangler",
+          "strategy": "percentage",
+          "author_email": "carlosgconde@gmail.com",
+          "annotations": {
+            "workers/triggered_by": "secret"
+          },
+          "versions": [
+            {
+              "version_id": "450bb934-cd35-4f28-b3c7-2c2d9370d245",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-10-09T12:32:14.280125Z"
+        },
+        {
+          "id": "39dd47e1-3394-43c1-adcc-ede40b89eb1e",
+          "source": "wrangler",
+          "strategy": "percentage",
+          "author_email": "carlosgconde@gmail.com",
+          "annotations": {
+            "workers/message": "Automatic deployment on upload.",
+            "workers/triggered_by": "upload"
+          },
+          "versions": [
+            {
+              "version_id": "5ddb5386-b822-4ff7-9b47-806c3b902767",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-10-09T12:32:07.583528Z"
+        }
+      ]
+    }
+  },
+  "initial_http_response": {
+    "code": 404,
+    "body": "error code: 1042\n"
+  },
+  "event_counts_before": [
+    {
+      "n": 0
+    }
+  ],
+  "revision_test_scope": "Pure production reconciliation function executed on remote canary; telemetry envelope has no upstream canonical revision.",
+  "final_counts": {
+    "trips": 2,
+    "charging_sessions": 2,
+    "telemetry_observations": 17,
+    "telemetry_events_short_retention": 10,
+    "d1_migrations": 9
+  },
+  "backup": {
+    "production_reads": 0,
+    "production_mutations": 0,
+    "databases": [
+      {
+        "role": "source",
+        "uuid": "ae39c2a8-5c78-427d-ae00-f7049837eaa4",
+        "name": "mitesla-backup-cert-source-20261009123329-76024871"
+      },
+      {
+        "role": "target",
+        "uuid": "6bdc56f7-9d31-4749-9b43-99b02138ec74",
+        "name": "mitesla-backup-cert-target-20261009123412-b36f8264"
+      }
+    ],
+    "tests": {
+      "export": "PASS",
+      "corrupt_rejected": "PASS",
+      "incompatible_rejected": "PASS",
+      "restore": "PASS",
+      "equivalence": "PASS",
+      "migrations": "9/9",
+      "foreign_keys": "PASS",
+      "tombstone_revision_null_zero_false_authority": "PASS",
+      "secrets_excluded": "PASS",
+      "nonfresh_rejected": "PASS",
+      "production_hard_deny": "PASS"
+    },
+    "cleanup": {
+      "ae39c2a8-5c78-427d-ae00-f7049837eaa4": "DELETED",
+      "6bdc56f7-9d31-4749-9b43-99b02138ec74": "DELETED"
+    },
+    "status": "REMOTE_PASS"
+  },
+  "logs_scope": "Canary observability disabled, no tail session; response bodies checked against in-memory secrets; application console paths inspected; stored logs not retrieved.",
+  "recovery_scope": "Separate HTTP requests use persistent remote D1; authenticated canary wrapper injects failures before RAW and after canonical insert. No forced isolate eviction.",
+  "status": "TELEMETRY_INTEGRITY_REMOTE_CERTIFIED",
+  "production_after": {
+    "deployments": [
+      {
+        "id": "7ceae60d-0481-48ed-b076-7de12bb2c966",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "deacebbc-b883-4da1-8c19-ca45130e8bb2",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:08:01.53629Z"
+      },
+      {
+        "id": "cd0566bb-3394-4f4f-9722-d864298cf7a7",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "3c2c62cf-8010-4be3-8a18-1f1c06cf14eb",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:07:13.346433Z"
+      },
+      {
+        "id": "ea386291-ace1-4010-bb6f-78ef8bc97a59",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "f591e3f6-4f0e-4751-ad0a-799c148382a6",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:07:00.881382Z"
+      },
+      {
+        "id": "5471e02d-af8f-4e7b-bd8f-fb1d6bf27a59",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "960ed39a-84f7-4f35-884d-6a31899415dd",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:06:25.938259Z"
+      },
+      {
+        "id": "036180cf-4209-4e99-9367-970b2156d6cc",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "62f64ffc-6fad-4379-9e6b-8c3a7daf0f25",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:05:43.707067Z"
+      },
+      {
+        "id": "b8922ede-4878-4f37-8bed-08443aee9170",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "secret"
+        },
+        "versions": [
+          {
+            "version_id": "ae66353d-6ce3-4649-9903-dffee629e60f",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:03:59.354603Z"
+      },
+      {
+        "id": "1535638e-edfa-41a6-81ad-40a12fd08951",
+        "source": "wrangler",
+        "strategy": "percentage",
+        "annotations": {
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "09dbdd90-7e9e-4c46-9193-d9e6ce3dfc67",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-08T17:00:58.098359Z"
+      },
+      {
+        "id": "65de8c27-279c-4e22-8798-dd35bfea9302",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version 31fee30c",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "31fee30c-2fd6-4a0f-b0a1-5a7f21a62cb9",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:48:04.124309Z"
+      },
+      {
+        "id": "bd854d3a-744c-4415-97f6-a899590ec19a",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version c0e9d8a8",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "c0e9d8a8-868b-4a8e-8997-0ea266a947d1",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:47:30.335778Z"
+      },
+      {
+        "id": "2ab33ca4-15a2-480d-a3dc-4c2ee591f997",
+        "source": "dash",
+        "strategy": "percentage",
+        "author_email": "carlosgconde@gmail.com",
+        "annotations": {
+          "workers/message": "Deployed version 623586f8",
+          "workers/triggered_by": "deployment"
+        },
+        "versions": [
+          {
+            "version_id": "623586f8-a6d6-46ba-a63b-90f7c3920c84",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-09-18T11:10:04.408545Z"
+      }
+    ]
+  },
+  "production_deployments_unchanged": true,
+  "cleanup_absence_audit": {
+    "4ee723e8-6ff1-424e-95b3-b2d26abca33e": "ABSENT_404",
+    "6bdc56f7-9d31-4749-9b43-99b02138ec74": "ABSENT_404",
+    "7b2c8150-a5c7-427b-b9f9-1206a5d29f2f": "ABSENT_404",
+    "95ed0991-e0c2-44cf-a1e5-e4763fd8385a": "ABSENT_404",
+    "964f9652-cee0-4de3-b2c9-abfd5e19a309": "ABSENT_404",
+    "ae39c2a8-5c78-427d-ae00-f7049837eaa4": "ABSENT_404",
+    "e1865326-3364-471d-8799-de8ab8584879": "ABSENT_404",
+    "f879b53a-0afa-4889-931c-ba629df88b50": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009122418": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009122543": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009122648": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009122755": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009122920": "ABSENT_404",
+    "mi-tesla-telemetry-canary-20261009123134": "ABSENT_404"
+  },
+  "source_pins": "PASS",
+  "cost_scope": "Cloudflare Free plan, no paid plan enabled; no paid resource or Tesla API used.",
+  "remote_checks_passed": 80,
+  "credential_log_remediation": {
+    "tool": "Wrangler auth token --json",
+    "issue": "Wrangler logger persisted OAuth output to local debug logs despite stdout being captured in memory. No credential was printed in chat or copied to reports.",
+    "action": "Credential values redacted in all logs created by this run; reproducible harness disables Wrangler disk logs for credential retrieval. Normal encrypted OAuth retained.",
+    "sanitized_logs": [
+      "wrangler-2026-10-09_12-22-34_364.log",
+      "wrangler-2026-10-09_12-24-18_618.log",
+      "wrangler-2026-10-09_12-29-20_658.log",
+      "wrangler-2026-10-09_12-35-11_236.log",
+      "wrangler-2026-10-09_12-27-55_600.log",
+      "wrangler-2026-10-09_12-25-43_583.log",
+      "wrangler-2026-10-09_12-26-47_927.log",
+      "wrangler-2026-10-09_12-31-34_131.log",
+      "wrangler-2026-10-09_12-35-38_343.log"
+    ],
+    "runtime_telemetry_secret_leakage": "No response leakage detected; canary observability disabled; no tail session."
+  }
+}

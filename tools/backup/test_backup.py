@@ -21,6 +21,7 @@ class BackupTests(unittest.TestCase):
                 if name == 'vin': record[name] = 'SYNTHETIC'
                 elif pk: record[name] = table+'-id'
                 elif notnull and default is None: record[name] = 0 if kind in ('REAL','INTEGER') else 'synthetic'
+            if table == 'telemetry_observations': record.update(source='TESLA_TELEMETRY',fingerprint='b'*64)
             if table == 'trips': record.update(revision=7,deleted_at='2026-10-08T00:00:00Z',distance_km=0,manual_override='{"enabled":false,"value":null,"zero":0}')
             if table == 'charging_sessions': record.update(revision=9,deleted_at='2026-10-08T00:00:00Z',total_cost=0,fast_charger_present=0)
             cols=list(record); self.db.execute(f'INSERT INTO {table} ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',list(record.values()))

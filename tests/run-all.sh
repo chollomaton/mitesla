@@ -17,7 +17,7 @@
 set -u
 cd "$(dirname "$0")"
 
-TESTS="test_certified_pins.mjs test_certified_security.mjs test_worker.mjs test_merge.js test_stats_null.js test_carga_null.js test_casa.js \
+TESTS="test_telemetry_integrity.mjs test_certified_pins.mjs test_certified_security.mjs test_worker.mjs test_merge.js test_stats_null.js test_carga_null.js test_casa.js \
 test_tracking.js test_globales_versionados.js test_reset_ui.js test_mapa_ui.js \
 test_smoke_load.js test_nav_mas.js test_a11y_modal.js test_crud_botones.js \
 test_forms_semantic.js test_forms_click.js test_ver_buttons.js test_pwa.js test_sw_404.js \
